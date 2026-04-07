@@ -4,6 +4,30 @@
 > 中文 | English — 双语技能，代码通用。Bilingual skill with shared code examples.
 > 官方文档 Docs: https://docs.itigerup.com/docs/place-order-java
 
+## 安全规范 / Safety Rules
+
+> **默认使用模拟账户。Default to Paper Trading.**
+
+### 模拟交易 vs 实盘交易 / Paper vs Live Trading
+
+| 特性 Feature | 模拟 Paper | 实盘 Live |
+|------|------|------|
+| 资金 Funds | 虚拟，无风险 Virtual, no risk | 真实资金 Real money |
+| 账户类型 `accountType` | `PAPER` | `STANDARD` / `GLOBAL` |
+| 默认 Default | **是** Yes | 需用户明确要求 User must explicitly request |
+
+### 实盘下单工作流 / Live Order Workflow
+
+当用户要求实盘交易时，**必须执行以下流程** / When user requests live trading, follow these steps:
+
+1. **确认账户 Verify account**: 获取账户列表，筛选 `accountType != "PAPER"` 的实盘账户 / Get account list, filter for non-PAPER accounts
+2. **二次确认 Confirm with user**: 下单前必须与用户确认：标的代码、买卖方向、数量、价格、账户类型 / Confirm symbol, action, quantity, price, account type
+3. **预览订单 Preview**: 建议先调用预览接口查看预估佣金和保证金 / Preview for commission and margin estimates
+4. **执行下单 Execute**: 确认后执行下单 / Place the order after confirmation
+5. **检查状态 Check status**: 下单返回成功仅表示提交，需查询订单确认成交 / Submission success ≠ execution; query order to confirm fill
+
+---
+
 ## 初始化 / Initialize
 
 ```java
@@ -252,6 +276,7 @@ if (response.isSuccess()) {
 ---
 
 ## 下单 / Place Orders
+<!-- 当用户提到 "买入"、"卖出"、"下单"、"buy"、"sell"、"order"、"place order" 时 -->
 
 **对应的请求类：TradeOrderRequest**
 
@@ -569,6 +594,7 @@ TradeOrderResponse response = client.execute(request);
 ---
 
 ## 预览订单 / Preview Order
+<!-- 当用户提到 "预览"、"佣金"、"保证金"、"preview"、"commission" 时 -->
 
 **对应的请求类：TradeOrderPreviewRequest**
 
@@ -623,6 +649,7 @@ System.out.println(JSONObject.toJSONString(response));
 ---
 
 ## 修改订单 / Modify Order
+<!-- 当用户提到 "改单"、"修改订单"、"modify"、"change order" 时 -->
 
 **对应的请求类：TigerHttpRequest(MethodName.MODIFY_ORDER)**
 
@@ -658,6 +685,7 @@ Long id = data.getLong("id");
 ---
 
 ## 撤销订单 / Cancel Order
+<!-- 当用户提到 "撤单"、"取消订单"、"cancel order" 时 -->
 
 **对应的请求类：TigerHttpRequest(MethodName.CANCEL_ORDER)**
 
@@ -689,6 +717,7 @@ Long id = data.getLong("id");
 ---
 
 ## 查询订单 / Query Orders
+<!-- 当用户提到 "订单"、"委托"、"orders"、"order status"、"order list" 时 -->
 
 ### 获取单个订单 / Get Single Order
 
@@ -1000,6 +1029,7 @@ while (true) {
 ---
 
 ## 账户资产 / Account Assets
+<!-- 当用户提到 "资产"、"资金"、"余额"、"购买力"、"assets"、"balance"、"buying power"、"cash" 时 -->
 
 ### 环球账户资产 / Global Account Assets
 
@@ -1115,6 +1145,7 @@ if (segment != null) {
 ---
 
 ## 持仓 / Positions
+<!-- 当用户提到 "持仓"、"仓位"、"我的股票"、"positions"、"holdings"、"portfolio" 时 -->
 
 **对应的请求类：PositionsRequest**
 

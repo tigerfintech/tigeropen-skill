@@ -4,6 +4,30 @@
 > 中文 | English — 双语技能。Bilingual skill.
 > 官方文档 Docs: https://docs.itigerup.com/docs/quote-option-java
 
+## 期权操作工作流 / Option Workflow
+<!-- 当用户提到 "期权"、"期权链"、"到期日"、"行权价"、"Greeks"、"Call"、"Put"、"看涨"、"看跌"、"option"、"option chain"、"expiration"、"strike" 时 -->
+
+当用户提到期权时，按以下流程操作 / When user mentions options, follow this workflow:
+
+### 查询期权 / Query Options
+
+1. **查到期日 Get expirations**: `OptionExpirationQueryRequest` → 获取可选到期日列表 / Get available expiration dates
+2. **查期权链 Get chain**: `OptionChainQueryRequest` → 获取指定到期日的所有合约，可按 Greeks 筛选 / Get contracts for a given expiry, filter by Greeks
+3. **查行情 Get quotes**: `OptionQuoteRequest` → 获取期权实时行情 / Get real-time option quotes
+
+### 期权交易 / Option Trading
+
+1. **构造合约 Build contract**: 使用 `ContractItem` 设置 `secType=OPT`, `symbol`, `expiry`, `strike`, `right` / Set option contract fields
+2. **预览订单 Preview**: 预览接口确认保证金和佣金 / Preview for margin and commission
+3. **下单 Place order**: 期权数量单位为"张" / Option quantity is in "contracts"
+
+### 港股期权特殊处理 / HK Option Special Handling
+
+- 港股期权标的代码不同于正股 / HK option underlyings differ from stock codes: `00700` → `TCH`（腾讯）
+- 使用 `OptionSymbolRequest` 查询港股期权代码映射 / Use `OptionSymbolRequest` for HK option symbol mapping
+
+---
+
 ## 初始化 / Initialize
 
 ```java

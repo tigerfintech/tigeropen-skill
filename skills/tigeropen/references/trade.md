@@ -4,6 +4,30 @@
 > 中文 | English — 双语技能，代码通用。Bilingual skill with shared code examples.
 > 官方文档 Docs: https://docs.itigerup.com/docs/place-order
 
+## 安全规范 / Safety Rules
+
+> **默认使用模拟账户。Default to Paper Trading.**
+
+### 模拟交易 vs 实盘交易 / Paper vs Live Trading
+
+| 特性 Feature | 模拟 Paper | 实盘 Live |
+|------|------|------|
+| 资金 Funds | 虚拟，无风险 Virtual, no risk | 真实资金 Real money |
+| 账户类型 `account_type` | `PAPER` | `STANDARD` / `GLOBAL` |
+| 默认 Default | **是** Yes | 需用户明确要求 User must explicitly request |
+
+### 实盘下单工作流 / Live Order Workflow
+
+当用户要求实盘交易时，**必须执行以下流程** / When user requests live trading, follow these steps:
+
+1. **确认账户 Verify account**: 调用 `get_managed_accounts()` 获取账户列表，筛选 `account_type != 'PAPER'` 的实盘账户 / Call `get_managed_accounts()`, filter for non-PAPER accounts
+2. **二次确认 Confirm with user**: 下单前必须与用户确认：标的代码、买卖方向、数量、价格、账户类型 / Confirm symbol, action, quantity, price, account type
+3. **预览订单 Preview**: 建议先调用 `preview_order()` 查看预估佣金和保证金 / Call `preview_order()` for commission and margin estimates
+4. **执行下单 Execute**: 确认后执行 `place_order()` / Place the order after confirmation
+5. **检查状态 Check status**: `place_order()` 返回成功仅表示提交，需通过 `get_orders()` 确认成交 / Submission success ≠ execution; poll `get_orders()` to confirm fill
+
+---
+
 ## 初始化 / Initialize
 
 ```python
@@ -15,8 +39,21 @@ trade_client = TradeClient(client_config=client_config)
 
 # 获取管理的账户 / Get managed accounts
 accounts = trade_client.get_managed_accounts()
-# 返回 AccountProfile 列表: account, capability, status, account_type
+# 返回 AccountProfile 列表 / Returns list of AccountProfile objects
+for a in accounts:
+    print(f"{a.account}: type={a.account_type}, capability={a.capability}, status={a.status}")
 ```
+
+**AccountProfile 属性 / AccountProfile Attributes**:
+
+| 属性 Attribute | 说明 Description |
+|---------------|-----------------|
+| `account` | 交易账户ID Trading account ID |
+| `account_type` | 账户类型: `PAPER`(模拟) / `STANDARD`(美股标准) / `GLOBAL`(全球) |
+| `capability` | 保证金类型: `CASH`(现金账户) / `MGRN`(Reg T 保证金) / `PMGRN`(投资组合保证金) |
+| `status` | 账户状态: `New`/`Funded`/`Open`/`Pending`/`Abandoned`/`Rejected`/`Closed`/`Unknown` |
+
+
 
 ---
 
@@ -95,6 +132,7 @@ derivatives = trade_client.get_derivative_contracts(symbol='AAPL', sec_type='OPT
 ---
 
 ## 下单 / Place Orders
+<!-- 当用户提到 "买入"、"卖出"、"下单"、"buy"、"sell"、"order"、"place order" 时 -->
 
 ### 限价单 LMT / Limit Order
 
@@ -244,6 +282,14 @@ trade_client.place_order(order)
 | AM 竞价市价 | - | ✅ | - | - | - |
 | OCA 一撤全撤 | ✅ | ✅ | - | - | - |
 
+```bash
+# CLI 下单 / Place orders via CLI
+tigeropen trade order place --symbol AAPL --action buy --order-type lmt --quantity 10 --limit-price 150
+tigeropen trade order place --symbol AAPL --action sell --order-type mkt --quantity 10
+tigeropen trade order place --symbol 00700 --action buy --order-type lmt --quantity 100 --limit-price 350 --sec-type stk
+tigeropen trade order place --symbol AAPL --action buy --order-type lmt --quantity 10 --limit-price 150 -y  # 跳过确认 skip confirm
+```
+
 ### 特殊下单场景 / Special Order Scenarios
 
 ```python
@@ -323,14 +369,38 @@ trade_client.place_order(order)
 ---
 
 ## 预览订单 / Preview Order
+<!-- 当用户提到 "预览"、"佣金"、"保证金"、"preview"、"commission" 时 -->
 
 ```python
 preview = trade_client.preview_order(order)
-# 返回保证金、佣金、验证信息 / Returns margin, commission, validation
-# 属性: init_margin, maintain_margin, order_status, warning_text
+# 返回 dict / Returns dict
+```
+
+**preview_order 返回字段 / Return Fields** (dict):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `init_margin_before` | 下单前账户初始保证金 Initial margin before order |
+| `init_margin` | 下单后预计初始保证金 Estimated initial margin after order |
+| `maint_margin_before` | 下单前维持保证金 Maintenance margin before order |
+| `maint_margin` | 下单后预计维持保证金 Estimated maintenance margin after order |
+| `margin_currency` | 保证金货币 Margin currency (e.g. `USD`) |
+| `equity_with_loan_before` | 下单前含借贷值股权 Equity with loan value before |
+| `equity_with_loan` | 下单后含借贷值股权 Equity with loan value after |
+| `min_commission` | 预期最低佣金 Minimum estimated commission |
+| `max_commission` | 预期最高佣金 Maximum estimated commission |
+| `commission_currency` | 佣金货币 Commission currency |
+| `warning_text` | 无法下单原因（仅在拒绝时返回）Rejection reason (only when rejected) |
+
+> 若无法下单，仅返回 `warning_text` 字段。
+
+```bash
+# CLI
+tigeropen trade order preview --symbol AAPL --action buy --order-type lmt --quantity 10 --limit-price 150
 ```
 
 ## 修改订单 / Modify Order
+<!-- 当用户提到 "改单"、"修改订单"、"modify"、"change order" 时 -->
 
 ```python
 order = trade_client.get_order(id=123456789)
@@ -341,10 +411,16 @@ trade_client.modify_order(order,
                            outside_rth=True)
 ```
 
+```bash
+# CLI (ORDER_ID 为全局订单 id / global order id)
+tigeropen trade order modify ORDER_ID --limit-price 155 --quantity 200
+```
+
 > 订单类型不可修改。仅 `Submitted` 或 `PartiallyFilled` 状态可改。
 > Order type cannot be changed. Only Submitted/PartiallyFilled orders can be modified.
 
 ## 撤销订单 / Cancel Order
+<!-- 当用户提到 "撤单"、"取消订单"、"cancel order" 时 -->
 
 ```python
 trade_client.cancel_order(id=123456789)
@@ -354,11 +430,18 @@ for order in trade_client.get_open_orders():
     trade_client.cancel_order(id=order.id)
 ```
 
+```bash
+# CLI
+tigeropen trade order cancel ORDER_ID
+tigeropen trade order cancel ORDER_ID -y   # 跳过确认 / skip confirmation
+```
+
 > 撤销为异步操作。使用 `id` (全局订单ID)。Cancellation is async. Use global order `id`.
 
 ---
 
 ## 查询订单 / Query Orders
+<!-- 当用户提到 "订单"、"委托"、"orders"、"order status"、"order list" 时 -->
 
 ```python
 # 所有订单 / All orders
@@ -398,23 +481,31 @@ if hasattr(orders, 'page_token') and orders.page_token:
 |---------------|-----------------|
 | `id` | 全局订单ID Global order ID |
 | `order_id` | 用户订单ID User order ID |
+| `account` | 交易账户ID Account ID |
 | `symbol` | 标的代码 Symbol |
 | `sec_type` | 证券类型 Security type |
 | `action` | BUY/SELL |
 | `order_type` | MKT/LMT/STP/STP_LMT/TRAIL |
-| `status` | 订单状态 Order status |
+| `status` | 订单状态 Order status (见下方 Status 表) |
 | `quantity` | 下单数量 Order quantity |
 | `filled_quantity` | 成交数量 Filled quantity |
 | `remaining_quantity` | 剩余数量 Remaining quantity |
 | `limit_price` | 限价 Limit price |
-| `aux_price` | 触发价 Aux price |
+| `aux_price` | 触发价/跟踪金额 Aux/trigger price |
 | `avg_fill_price` | 平均成交价 Average fill price |
-| `trade_time` | 交易时间 Trade time |
+| `trade_time` | 最新成交时间 Last trade time |
 | `time_in_force` | DAY/GTC/GTD |
-| `outside_rth` | 是否盘前盘后 Outside RTH |
-| `order_legs` | 附加订单列表 Attached orders |
+| `outside_rth` | 是否盘前盘后 Outside regular trading hours |
+| `trading_session_type` | 交易时段类型 Trading session type |
+| `order_legs` | 附加订单列表 Attached order legs |
 | `algo_params` | 算法参数 Algo parameters |
-| `user_mark` | 自定义标记 User mark |
+| `user_mark` | 自定义标记 Custom mark |
+| `reason` | 拒绝/错误原因 Rejection reason |
+| `commission` | 实际佣金 Actual commission |
+| `combo_type` | 组合类型 Combo type |
+| `currency` | 货币 Currency |
+| `exchange` | 交易所 Exchange |
+| `contract` | 合约对象 Contract object |
 
 ### 订单状态 / Order Status
 
@@ -428,6 +519,15 @@ if hasattr(orders, 'page_token') and orders.page_token:
 | `Cancelled` | 已取消 Cancelled |
 | `Inactive` | 已失效/拒绝 Rejected |
 | `PendingCancel` | 待取消 Pending cancel |
+
+```bash
+# CLI
+tigeropen trade order list                                   # 所有订单
+tigeropen trade order list --status Filled                   # 已成交
+tigeropen trade order list --status Submitted                # 持仓中
+tigeropen trade order list --symbol AAPL --limit 10         # 按标的筛选
+tigeropen trade order get ORDER_ID                           # 查单个订单
+```
 
 ---
 
@@ -443,12 +543,37 @@ transactions = trade_client.get_transactions(
 transactions = trade_client.get_transactions(order_id='123456789',
                                               start_time=1625097600000,
                                               end_time=1625184000000)
-# 分页 / Pagination with page_token
+# 分页 / Pagination
+response = trade_client.get_transactions(symbol='AAPL', start_time=..., end_time=..., page_token='')
+next_page = response.page_token  # 下一页令牌
+```
+
+**Transaction 对象属性 / Transaction Attributes**:
+
+| 属性 Attribute | 说明 Description |
+|---------------|-----------------|
+| `id` | 成交记录ID Transaction ID |
+| `account` | 交易账户ID Account ID |
+| `order_id` | 关联订单ID Related order ID |
+| `contract` | 合约对象 Contract object |
+| `action` | BUY/SELL |
+| `filled_quantity` | 成交数量 Filled quantity |
+| `filled_quantity_scale` | 数量精度 Quantity scale (fractional shares) |
+| `filled_price` | 成交价格 Filled price |
+| `filled_amount` | 成交金额 Filled amount |
+| `transacted_at` | 成交时间（毫秒时间戳） Transaction time (ms) |
+
+```bash
+# CLI (--symbol 为必填 / --symbol is required)
+tigeropen trade transaction list --symbol AAPL
+tigeropen trade transaction list --symbol AAPL --start-time 2025-01-01 --end-time 2025-06-30
+tigeropen trade transaction list --symbol AAPL --limit 20
 ```
 
 ---
 
 ## 账户资产 / Account Assets
+<!-- 当用户提到 "资产"、"资金"、"余额"、"购买力"、"assets"、"balance"、"buying power"、"cash" 时 -->
 
 ### 综合资产(推荐) / Prime Assets (Recommended)
 
@@ -468,6 +593,28 @@ print(f"缓冲比率 Cushion: {assets.cushion}")
 # 每个 Segment 有 cash_balance, cash_available_for_trade, net_liquidation 等
 # 每个 Segment.currency_assets 包含各币种明细
 ```
+
+### Segment 关键字段 / Segment Key Fields
+
+| 字段 Field | 说明 Description | APP 对应 |
+|------------|-----------------|----------|
+| `net_liquidation` | 总资产（净清算价值） Net liquidation | 总资产 |
+| `cash_balance` | 现金额 Cash balance | 现金 |
+| `cash_available_for_trade` | 可用资金（含保证金额度） Available funds | 可用资金 |
+| `cash_available_for_withdrawal` | 可提现金额 Withdrawable cash | 可提金额 |
+| `gross_position_value` | 证券总价值 Total position value | 市值 |
+| `buying_power` | 购买力 Buying power | 购买力 |
+| `unrealized_pl` | 浮动盈亏 Unrealized P&L | 未实现盈亏 |
+| `realized_pl` | 已实现盈亏 Realized P&L | 已实现盈亏 |
+| `init_margin` | 初始保证金 Initial margin | 初始保证金 |
+| `maintain_margin` | 维持保证金 Maintenance margin | 维持保证金 |
+| `overnight_margin` | 隔夜保证金 Overnight margin | - |
+| `excess_liquidation` | 剩余流动性 Excess liquidity (= equity - maintain_margin) | 剩余流动性 |
+| `leverage` | 杠杆倍数 Leverage | 杠杆 |
+| `locked_funds` | 锁定资金 Locked funds | - |
+
+> **多币种注意 / Multi-currency Note**: 持仓涉及多币种时（如同时持有 USD 和 HKD 标的），查询资产时指定 `base_currency` 统一币种口径，避免直接累加不同币种的数值。每个 Segment 的 `currency_assets` 包含各币种明细和 `forex_rate` 汇率。
+> When positions span multiple currencies, specify `base_currency` in the query. Do not sum values across currencies directly. Use `currency_assets` for per-currency breakdown with `forex_rate`.
 
 ### 全球资产 / Global Assets
 
@@ -489,9 +636,17 @@ analytics = trade_client.get_analytics_asset(
 # 返回 summary(pnl, pnl_percentage, annualized_return) 和 history(每日资产/盈亏)
 ```
 
+```bash
+# CLI
+tigeropen account assets                                      # 综合资产（推荐）
+tigeropen account assets --currency USD                      # 指定计价货币
+tigeropen account analytics --start-date 2025-01-01 --end-date 2025-12-31  # 资产分析
+```
+
 ---
 
 ## 持仓 / Positions
+<!-- 当用户提到 "持仓"、"仓位"、"我的股票"、"positions"、"holdings"、"portfolio" 时 -->
 
 ```python
 from tigeropen.common.consts import SecurityType, Market
@@ -522,16 +677,33 @@ fut_pos = trade_client.get_positions(sec_type=SecurityType.FUT)
 
 ### Position 对象属性 / Position Attributes
 
-| 属性 Attribute | 说明 Description |
-|---------------|-----------------|
-| `contract` | 合约对象 Contract |
-| `qty` / `quantity` | 持仓数量 Quantity |
-| `average_cost` | 持仓均价 Average cost |
-| `market_price` | 最新市场价 Market price |
-| `market_value` | 市值 Market value |
-| `unrealized_pnl` | 未实现盈亏 Unrealized P&L |
-| `realized_pnl` | 已实现盈亏 Realized P&L |
-| `salable_qty` | 可卖数量 Salable quantity |
+| 属性 Attribute | 说明 Description | APP 对应 |
+|---------------|-----------------|----------|
+| `contract` | 合约对象 Contract | - |
+| `qty` / `position_qty` | 持仓数量 Quantity | 持有数量 |
+| `average_cost` | 含佣金持仓均价 Average cost (incl. commission) | 平均成本 |
+| `average_cost_by_average` | 均价成本（不含佣金） Average cost (excl. commission) | - |
+| `market_price` | 最新价格 Market price | 现价 |
+| `market_value` | 市值 Market value | 市值 |
+| `unrealized_pnl` | 浮动盈亏 Unrealized P&L (FIFO) | 未实现盈亏 |
+| `unrealized_pnl_by_average` | 均价成本浮动盈亏 Unrealized P&L (avg cost) | - |
+| `unrealized_pnl_percent` | 浮动盈亏率 Unrealized P&L % | 盈亏百分比 |
+| `realized_pnl` | 已实现盈亏 Realized P&L (FIFO) | 已实现盈亏 |
+| `salable_qty` | 可卖数量 Salable quantity | 可卖 |
+| `today_pnl` | 今日盈亏额 Today's P&L | 今日盈亏 |
+| `today_pnl_percent` | 今日盈亏率 Today's P&L % | - |
+| `ratio` | 持仓占比 Position ratio | - |
+| `latest_price` | 最新成交价 Latest trade price | - |
+| `currency` | 币种 Currency | - |
+
+```bash
+# CLI
+tigeropen trade position list                                 # 所有股票持仓
+tigeropen trade position list --sec-type opt                  # 期权持仓
+tigeropen trade position list --sec-type fut                  # 期货持仓
+tigeropen trade position list --market hk                     # 港股持仓
+tigeropen trade position list --symbol AAPL                  # 指定标的
+```
 
 ---
 
@@ -569,7 +741,7 @@ records = trade_client.get_funding_history(
     start_time='2025-01-01', end_time='2025-06-30', currency='USD')
 ```
 
-## 外汇下单 / Forex Order
+## 换汇下单 / Forex Order
 
 ```python
 from tigeropen.common.consts import SegmentType

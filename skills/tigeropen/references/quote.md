@@ -32,6 +32,13 @@ for s in status:
 # trading_status: NOT_YET_OPEN, PRE_HOUR_TRADING, TRADING, MIDDLE_CLOSE, POST_HOUR_TRADING, CLOSING, EARLY_CLOSING
 ```
 
+```bash
+# CLI
+tigeropen quote market-status          # 所有市场 / All markets
+tigeropen quote market-status --market US
+tigeropen quote market-status --market HK
+```
+
 ## 交易日历 / Trading Calendar
 
 ```python
@@ -62,10 +69,32 @@ details = quote_client.get_stock_details(symbols=['AAPL'])
 
 ```python
 # 基本面指标 / Fundamental indicators
-fundamentals = quote_client.get_stock_fundamental(symbols=['AAPL', 'TSLA'])
-# 属性: symbol, roe, roa, pe_ttm, pe_lyr, pb, ps_ttm, market_value, 52week_high, 52week_low,
-#       volume_ratio, turnover_rate, latest_earnings_date, next_earnings_date
+fundamentals = quote_client.get_stock_fundamental(symbols=['AAPL', 'TSLA'], market='US')
+# 返回 pandas.DataFrame
 ```
+
+**get_stock_fundamental 返回字段 / Return Fields** (pandas.DataFrame):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `symbol` | 股票代码 |
+| `roe` | 净资产收益率 Return on equity |
+| `roa` | 资产收益率 Return on assets |
+| `pb_rate` | 市净率 P/B ratio |
+| `ps_rate` | 市销率 P/S ratio |
+| `divide_rate` | 股息率 Dividend yield |
+| `week52_high` | 52周最高价 52-week high |
+| `week52_low` | 52周最低价 52-week low |
+| `ttm_eps` | TTM每股收益 TTM earnings per share |
+| `lyr_eps` | 上年每股收益 Last year EPS |
+| `volume_ratio` | 量比 Volume ratio |
+| `turnover_rate` | 换手率 Turnover rate |
+| `ttm_pe_rate` | TTM市盈率 TTM P/E ratio |
+| `lyr_pe_rate` | 上年市盈率 Last year P/E ratio |
+| `market_cap` | 总市值 Market capitalization |
+| `float_market_cap` | 流通市值 Float market cap |
+
+> ⚠️ 注意：字段名与 `get_financial_daily` 不同。`get_stock_fundamental` 用 `ttm_pe_rate`，而 `get_financial_daily` 用 `pe_ttm`。
 
 ---
 
@@ -75,17 +104,51 @@ fundamentals = quote_client.get_stock_fundamental(symbols=['AAPL', 'TSLA'])
 
 ```python
 briefs = quote_client.get_stock_briefs(['AAPL', 'TSLA', '00700'])
-for b in briefs:
-    print(f"{b.symbol}: price={b.latest_price}, change={b.change}, "
-          f"change%={b.change_percent}%, volume={b.volume}, "
-          f"open={b.open}, high={b.high}, low={b.low}, pre_close={b.pre_close}")
+# 返回 pandas.DataFrame / Returns pandas.DataFrame
+for _, row in briefs.iterrows():
+    print(f"{row['symbol']}: price={row['latest_price']}, volume={row['volume']}, "
+          f"open={row['open']}, high={row['high']}, low={row['low']}, pre_close={row['pre_close']}")
 
 # 含盘前盘后 / Include pre/after-hours
 briefs = quote_client.get_stock_briefs(['AAPL'], include_hour_trading=True)
-# 额外属性: hour_trading_latest_price, hour_trading_pre_close, hour_trading_latest_time, hour_trading_volume, hour_trading_change_percent
 
 # 延迟行情(无权限时) / Delayed quotes (when no permission)
 delayed = quote_client.get_stock_delay_briefs(symbols=['AAPL'])
+```
+
+**get_stock_briefs 返回字段 / Return Fields** (pandas.DataFrame):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `symbol` | 股票代码 |
+| `open` | 开盘价 Opening price |
+| `high` | 最高价 Highest price |
+| `low` | 最低价 Lowest price |
+| `close` | 收盘价 Closing price |
+| `pre_close` | 前收价 Previous close |
+| `adj_pre_close` | 复权过的前收价 Adjusted previous close |
+| `latest_price` | 最新价 Latest price |
+| `latest_time` | 最新成交时间（毫秒时间戳） Latest trade time (ms) |
+| `volume` | 成交量 Volume |
+| `ask_price` | 卖一价 Ask price |
+| `ask_size` | 卖一量 Ask size |
+| `bid_price` | 买一价 Bid price |
+| `bid_size` | 买一量 Bid size |
+| `status` | 交易状态: `NORMAL`(正常) / `HALTED`(停牌) / `DELIST`(退市) / `NEW`(新股) / `ALTER`(变更) / `UNKNOWN` |
+| `hour_trading_tag` | 盘前盘后标记（`Pre-Mkt`/`Post-Mkt`） |
+| `hour_trading_latest_price` | 盘前盘后最新价 |
+| `hour_trading_pre_close` | 盘前盘后前收价 |
+| `hour_trading_latest_time` | 盘前盘后最新成交时间 |
+| `hour_trading_volume` | 盘前盘后成交量 |
+| `hour_trading_timestamp` | 盘前盘后时间戳（毫秒） |
+
+> 盘前盘后字段仅在 `include_hour_trading=True` 时有数据。
+```
+
+```bash
+# CLI (需要行情权限 / requires quote permission)
+tigeropen quote briefs AAPL TSLA
+tigeropen quote briefs AAPL --hour-trading   # 含盘前盘后 / include pre/after-hours
 ```
 
 ### 夜盘行情 / Overnight Quotes
@@ -153,7 +216,31 @@ bars = quote_client.get_bars_by_page(symbol='AAPL', period=BarPeriod.DAY,
 # Also supports trade_session and with_fundamental params
 ```
 
+**get_bars 返回字段 / Return Fields** (pandas.DataFrame):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `symbol` | 股票代码 |
+| `time` | K线时间（毫秒时间戳） Timestamp in milliseconds |
+| `open` | 开盘价 Opening price |
+| `high` | 最高价 Highest price |
+| `low` | 最低价 Lowest price |
+| `close` | 收盘价 Closing price |
+| `volume` | 成交量 Trading volume |
+| `amount` | 成交额 Trading amount |
+| `next_page_token` | 下一页令牌（单标的分页时使用） Next page token (single symbol pagination) |
+
+> `with_fundamental=True` 时额外返回 `pe_ttm`、`turnover_rate` 等字段。
+
 **K线周期 / Bar Periods**: `day/week/month/year/1min/3min/5min/10min/15min/30min/45min/60min/2hour/3hour/4hour/6hour`
+
+```bash
+# CLI
+tigeropen quote bars AAPL                               # 日K，251根
+tigeropen quote bars AAPL --period 5min --limit 100    # 5分钟K线
+tigeropen quote bars AAPL --begin-time 2026-01-01 --end-time 2026-03-31  # 时间范围
+tigeropen quote bars AAPL TSLA                   # 多标的
+```
 
 ---
 
@@ -168,6 +255,37 @@ depth = quote_client.get_depth_quote(['AAPL'], market=Market.US)
 # 港股深度 / HK depth
 depth = quote_client.get_depth_quote(['00700'], market=Market.HK)
 # HK: 最多10档 / up to 10 levels
+```
+
+**get_depth_quote 返回结构 / Return Structure**:
+
+单个标的时返回 dict / Single symbol returns a dict:
+```python
+{
+    'symbol': 'AAPL',
+    'asks': [(ask_price1, ask_volume1, order_count1), (ask_price2, ...)],  # 卖盘，从低到高
+    'bids': [(bid_price1, bid_volume1, order_count1), (bid_price2, ...)],  # 买盘，从高到低
+}
+
+# 访问示例 / Access example:
+asks = depth['asks']  # [(226.50, 300, 2), (226.55, 500, 1), ...]
+bids = depth['bids']  # [(226.45, 400, 3), (226.40, 200, 1), ...]
+for price, volume, order_count in asks[:5]:
+    print(f"Ask: price={price}, vol={volume}, orders={order_count}")
+```
+
+多个标的时返回嵌套 dict / Multiple symbols return nested dict:
+```python
+{
+    'AAPL': {'symbol': 'AAPL', 'asks': [...], 'bids': [...]},
+    'TSLA': {'symbol': 'TSLA', 'asks': [...], 'bids': [...]},
+}
+```
+
+```bash
+# CLI (--market 为必选参数 / --market is required)
+tigeropen quote depth AAPL --market US
+tigeropen quote depth 00700 --market HK
 ```
 
 ## 逐笔成交 / Trade Ticks
@@ -186,6 +304,12 @@ ticks = quote_client.get_trade_ticks(symbols=['AAPL'], limit=100,
 ticks = quote_client.get_trade_ticks(symbols=['AAPL'], begin_index=0, end_index=100)
 ```
 
+```bash
+# CLI
+tigeropen quote ticks AAPL
+tigeropen quote ticks AAPL --limit 50
+```
+
 ## 分时数据 / Timeline (Intraday)
 
 ```python
@@ -199,6 +323,12 @@ timeline = quote_client.get_timeline(['AAPL'], trade_session=TradingSession.Over
 # 历史某日分时 / Historical date
 timeline = quote_client.get_timeline_history(['AAPL'], date='2025-06-18')
 # 也支持 trade_session 参数 / Also supports trade_session param
+```
+
+```bash
+# CLI
+tigeropen quote timeline AAPL                     # 今日分时
+tigeropen quote timeline AAPL --date 2026-03-20   # 历史某日
 ```
 
 ---
@@ -218,6 +348,12 @@ flow = quote_client.get_capital_flow(symbol='AAPL', market='US',
 # 资金分布 / Capital distribution
 distribution = quote_client.get_capital_distribution(symbol='AAPL', market='US')
 # 属性: net_inflow, super_large_net_inflow, large/middle/small_net_inflow
+```
+
+```bash
+# CLI
+tigeropen quote capital flow AAPL --market US --period day
+tigeropen quote capital distribution AAPL --market US
 ```
 
 ## 港股经纪商 / HK Broker Data
@@ -268,6 +404,13 @@ report = quote_client.get_financial_report(
 # CashFlow: operating_cash_flow, capital_expenditure, free_cash_flow, dividends_paid...
 ```
 
+```bash
+# CLI
+tigeropen quote fundamental financial AAPL --fields total_revenue,net_income
+tigeropen quote fundamental financial AAPL --period-type QUARTERLY
+tigeropen quote fundamental financial AAPL --begin-date 2024-01-01 --end-date 2026-01-01
+```
+
 ### 分红 / Dividends
 
 ```python
@@ -275,6 +418,11 @@ dividends = quote_client.get_corporate_dividend(
     symbols=['AAPL'], market='US',
     begin_date='2024-01-01', end_date='2025-12-31')
 # 属性: symbol, announce_date, record_date, pay_date, amount, currency
+```
+
+```bash
+# CLI
+tigeropen quote fundamental dividend AAPL --begin-date 2024-01-01 --end-date 2026-01-01
 ```
 
 ### 拆合股 / Stock Splits
@@ -292,6 +440,12 @@ splits = quote_client.get_corporate_split(
 earnings = quote_client.get_corporate_earnings_calendar(
     market='US', begin_date='2025-06-01', end_date='2025-06-30')
 # 属性: symbol, name, market, earnings_date, timing(BMO/AMC)
+```
+
+```bash
+# CLI
+tigeropen quote fundamental earnings --begin-date 2026-03-01 --end-date 2026-03-31
+tigeropen quote fundamental earnings --market HK --begin-date 2026-03-01 --end-date 2026-03-31
 ```
 
 ---
@@ -332,6 +486,64 @@ timeline = quote_client.get_option_timeline(identifiers=['AAPL  250829C00150000'
 hk_symbols = quote_client.get_option_symbols(market='HK')  # e.g. 00700 -> TCH.HK
 ```
 
+**get_option_chain 返回字段 / Return Fields** (pandas.DataFrame):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `identifier` | 期权完整代码 Full option identifier |
+| `symbol` | 标的代码 Underlying symbol |
+| `expiry` | 到期日毫秒时间戳 Expiration timestamp (ms) |
+| `strike` | 行权价 Strike price |
+| `put_call` | `CALL`(看涨) / `PUT`(看跌) |
+| `multiplier` | 期权乘数（美股通常100） Option multiplier |
+| `ask_price` | 卖价 Ask price |
+| `ask_size` | 卖量 Ask size |
+| `bid_price` | 买价 Bid price |
+| `bid_size` | 买量 Bid size |
+| `pre_close` | 前收盘价 Previous close |
+| `latest_price` | 最新价 Latest price |
+| `volume` | 成交量 Volume |
+| `open_interest` | 未平仓合约数 Open interest |
+| `last_timestamp` | 最后交易时间戳 Last trade timestamp (ms) |
+| `implied_vol` | 隐含波动率 Implied volatility |
+| `delta` | Delta 值 |
+| `gamma` | Gamma 值 |
+| `theta` | Theta 值（每日时间价值损耗） |
+| `vega` | Vega 值（波动率敏感度） |
+| `rho` | Rho 值（利率敏感度） |
+
+**get_option_briefs 返回字段 / Return Fields** (pandas.DataFrame):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `identifier` | 期权完整代码 Full option identifier |
+| `symbol` | 标的代码 Underlying symbol |
+| `expiry` | 到期日毫秒时间戳 Expiration timestamp (ms) |
+| `strike` | 行权价 Strike price |
+| `put_call` | `CALL` / `PUT` |
+| `multiplier` | 期权乘数 Option multiplier |
+| `ask_price` | 卖价 Ask price |
+| `ask_size` | 卖量 Ask size |
+| `bid_price` | 买价 Bid price |
+| `bid_size` | 买量 Bid size |
+| `pre_close` | 前收盘价 Previous close |
+| `latest_price` | 最新价 Latest price |
+| `latest_time` | 最新交易时间 Latest trade time |
+| `volume` | 成交量 Volume |
+| `open_interest` | 未平仓数量 Open interest |
+| `open` | 开盘价 Open price |
+| `high` | 最高价 High price |
+| `low` | 最低价 Low price |
+| `change` | 价格变动 Price change |
+| `volatility` | 历史波动率 Historical volatility |
+| `rates_bonds` | 无风险利率 Risk-free interest rate |
+| `mid_price` | 买卖价中间价 Mid price (ask+bid)/2 |
+| `mid_timestamp` | 中间价时间戳 Mid price timestamp (ms) |
+| `mark_price` | 标记价格 Mark price |
+| `mark_timestamp` | 标记价格时间戳 Mark price timestamp (ms) |
+| `pre_mark_price` | 前标记价格 Previous mark price |
+| `selling_return` | 卖出收益率 Selling return |
+
 ### 期权分析 / Option Analysis
 
 ```python
@@ -347,6 +559,14 @@ analysis = quote_client.get_option_analysis(symbols=['AAPL'],
 **期权代码格式 / Option Symbol Format**:
 - 美股 US: `'AAPL  250829C00150000'` (标的 + YYMMDD + C/P + 行权价*1000)
 - 港股 HK: `'TCH.HK 230616C00550000'`
+
+```bash
+# CLI
+tigeropen quote option expirations AAPL                        # 到期日列表
+tigeropen quote option chain AAPL 2026-06-19                   # 期权链
+tigeropen quote option briefs "AAPL  260619C00150000"          # 实时行情
+tigeropen quote option bars "AAPL  260619C00150000" --period day --limit 10  # K线
+```
 
 ---
 
@@ -380,6 +600,8 @@ brief = quote_client.get_future_brief(identifiers=['CL2509'])
 
 # 深度行情 / Depth
 depth = quote_client.get_future_depth(identifiers=['CL2509'])
+# 单个合约返回: {'identifier': 'CL2509', 'asks': [{'price': 63.07, 'size': 10}, ...], 'bids': [...]}
+# 多个合约返回: {'CL2509': {'asks': [...], 'bids': [...]}, 'ES2509': {...}}
 
 # 逐笔 / Ticks
 ticks = quote_client.get_future_trade_ticks(identifier='CL2509', limit=50)
@@ -392,9 +614,43 @@ bars = quote_client.get_future_bars_by_page(identifier='CL2509', period=BarPerio
                                              begin_time='2025-01-01', end_time='2025-06-30')
 ```
 
+**get_future_brief 返回字段 / Return Fields** (pandas.DataFrame):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `identifier` | 期货合约代码 Contract code (e.g. `CL2509`) |
+| `ask_price` | 卖价 Ask price |
+| `ask_size` | 卖量 Ask size |
+| `bid_price` | 买价 Bid price |
+| `bid_size` | 买量 Bid size |
+| `pre_close` | 前收价 Previous close |
+| `latest_price` | 最新价 Latest price |
+| `latest_size` | 最新成交量 Latest trade volume |
+| `latest_time` | 最新成交时间（毫秒时间戳） Latest time (ms) |
+| `volume` | 当日累计成交手数 Total volume today |
+| `open_interest` | 未平仓合约数量 Open interest |
+| `open_interest_change` | 未平仓合约变化量 Open interest change |
+| `open` | 开盘价 Open price |
+| `high` | 最高价 High price |
+| `low` | 最低价 Low price |
+| `settlement` | 结算价 Settlement price |
+| `limit_up` | 涨停价 Upper price limit |
+| `limit_down` | 跌停价 Lower price limit |
+| `avg_price` | 均价 Average price |
+
+```bash
+# CLI
+tigeropen quote future exchanges                       # 交易所列表
+tigeropen quote future contracts CME                  # 交易所合约
+tigeropen quote future briefs ES2606 CL2509           # 实时报价
+tigeropen quote future bars CL2509 --period day --limit 20  # K线
+```
+
 ---
 
 ## 基金行情 / Fund Quotes
+
+> CLI 暂不支持，请使用 Python SDK。No CLI equivalent — use Python SDK.
 
 ```python
 # 基金代码 / Fund symbols
@@ -414,6 +670,8 @@ history = quote_client.get_fund_history_quote(symbols=['ARKK'],
 ---
 
 ## 数字货币行情 / Cryptocurrency Quotes
+
+> CLI 暂不支持，请使用 Python SDK。No CLI equivalent — use Python SDK.
 
 ```python
 from tigeropen.common.consts import SecurityType
@@ -435,6 +693,8 @@ timeline = quote_client.get_timeline(['BTC/USD'], sec_type=SecurityType.CC)
 
 ## 窝轮/牛熊证行情 / Warrant & CBBC Quotes
 
+> CLI 暂不支持，请使用 Python SDK。No CLI equivalent — use Python SDK.
+
 ```python
 # 窝轮筛选器 / Warrant scanner
 warrants = quote_client.get_warrant_filter(
@@ -449,60 +709,146 @@ briefs = quote_client.get_warrant_briefs(symbols=['12345'])
 
 ## 选股器 / Market Scanner
 
-```python
-from tigeropen.common.consts import Market, StockField, AccumulateField, FinancialField, MultiTagField, SortDirection
+### 选股工作流 / Scanner Workflow
 
-# 基础选股 / Basic scanning
-result = quote_client.market_scanner(
-    market=Market.US,
-    sort_field_name='changeRate',
-    sort_dir=SortDirection.DESC,
-    filter_fields=[
-        {'fieldName': StockField.FloatMarketValue, 'filterMin': 1e9, 'filterMax': 1e12},  # 流通市值 1B-1T
-        {'fieldName': StockField.ChangeRate, 'filterMin': 5, 'filterMax': 30},  # 涨跌幅 5%-30%
-        {'fieldName': StockField.Volume, 'filterMin': 1000000},  # 成交量 > 1M
-    ],
-    limit=20
-)
-
-# 带财务指标 / With financial fields
-result = quote_client.market_scanner(
-    market=Market.US,
-    sort_field_name='pe_ttm',
-    sort_dir=SortDirection.ASC,
-    filter_fields=[
-        {'fieldName': FinancialField.PE_TTM, 'filterMin': 0, 'filterMax': 20},
-        {'fieldName': StockField.FloatMarketValue, 'filterMin': 1e10},
-    ],
-    limit=50
-)
-
-# 多标签筛选 / Multi-tag filter (ETF, has options, industry)
-result = quote_client.market_scanner(
-    market=Market.US,
-    filter_fields=[
-        {'fieldName': MultiTagField.HasOption, 'filterValues': ['true']},
-        {'fieldName': MultiTagField.IsETF, 'filterValues': ['false']},
-    ]
-)
-
-# 获取筛选标签值 / Get scanner tag values
-tags = quote_client.get_market_scanner_tags(market=Market.US, field_name=MultiTagField.IndustryCode)
+```
+1. 确定筛选条件 → 2. 构造 StockFilter 对象列表 → 3. 设置排序 SortFilterData → 4. 调用 market_scanner → 5. 分页读取结果
 ```
 
-### StockField 选股字段
+```python
+from tigeropen.quote.domain.filter import StockFilter, SortFilterData
+from tigeropen.common.consts.filter_fields import (
+    StockField, AccumulateField, FinancialField, MultiTagField,
+    AccumulatePeriod, FinancialPeriod
+)
+from tigeropen.common.consts import Market, SortDirection
 
-| 字段 Field | 说明 Description |
-|-----------|-----------------|
-| `Change` | 涨跌额 Price change |
-| `ChangeRate` | 涨跌幅% Change rate |
-| `LatestPrice` | 最新价 Latest price |
-| `Volume` | 成交量 Volume |
-| `Amount` | 成交额 Turnover |
-| `TurnoverRate` | 换手率 Turnover rate |
-| `FloatShare` | 流通股本 Float shares |
-| `FloatMarketValue` | 流通市值 Float market cap |
+# ── 基础筛选: 市值 + PE ─────────────────────────────────────────────────────────
+f_cap   = StockFilter(StockField.MarketValue, filter_min=1e10)          # 总市值 > 100亿
+f_pe    = StockFilter(StockField.PeTTM, filter_max=30)                  # PE TTM < 30
+sort    = SortFilterData(StockField.MarketValue, sort_dir=SortDirection.DESC)
+
+result = quote_client.market_scanner(
+    market=Market.US,
+    filters=[f_cap, f_pe],
+    sort_field_data=sort,
+    page_size=20
+)
+
+print(f"共 {result.total_count} 条 / Total: {result.total_count}")
+for item in result.items:
+    print(f"{item.symbol}: 市值={item[f_cap]:.2e}, PE={item[f_pe]:.1f}")
+
+# ── 分页读取 / Pagination ───────────────────────────────────────────────────────
+cursor_id = result.cursor_id
+while result.page < result.total_page - 1 and cursor_id:
+    result = quote_client.market_scanner(
+        market=Market.US, filters=[f_cap, f_pe],
+        sort_field_data=sort, page_size=20, cursor_id=cursor_id
+    )
+    cursor_id = result.cursor_id
+    for item in result.items:
+        print(item.symbol, item[f_cap])
+```
+
+```python
+# ── 今日涨幅筛选 / Today's gainers ────────────────────────────────────────────
+# 使用 StockField.current_ChangeRate (盘中涨跌幅) 筛选当日涨幅 > 3%
+f_change = StockFilter(StockField.current_ChangeRate, filter_min=3)
+sort     = SortFilterData(StockField.current_ChangeRate, sort_dir=SortDirection.DESC)
+result   = quote_client.market_scanner(market=Market.US, filters=[f_change],
+                                        sort_field_data=sort, page_size=20)
+for item in result.items:
+    print(f"{item.symbol}: +{item[f_change]:.1f}%")
+```
+
+```python
+# ── 高 ROE 筛选 / High ROE (annual) ──────────────────────────────────────────
+# AccumulateField.ROE 需要指定 accumulate_period，返回值为小数 (0.15 = 15%)
+f_roe  = StockFilter(AccumulateField.ROE, filter_min=0.15,
+                     accumulate_period=AccumulatePeriod.ANNUAL)
+sort   = SortFilterData(AccumulateField.ROE, sort_dir=SortDirection.DESC,
+                        period=AccumulatePeriod.ANNUAL)
+result = quote_client.market_scanner(market=Market.US, filters=[f_roe],
+                                      sort_field_data=sort, page_size=20)
+for item in result.items:
+    print(f"{item.symbol}: ROE={item[f_roe]*100:.1f}%")
+```
+
+```python
+# ── FinancialField (LTM 口径) ─────────────────────────────────────────────────
+f_roe_fin = StockFilter(FinancialField.ReturnOnEquityRate, filter_min=0.15,
+                        financial_period=FinancialPeriod.LTM)
+result    = quote_client.market_scanner(market=Market.US, filters=[f_roe_fin], page_size=20)
+
+# ── MultiTagField: 有期权且非 ETF ─────────────────────────────────────────────
+f_opts = StockFilter(MultiTagField.OptionsAvailable, tag_list=['1'])
+f_etf  = StockFilter(MultiTagField.Type, tag_list=['0'])  # 0 = 普通股
+result = quote_client.market_scanner(market=Market.US,
+                                      filters=[f_opts, f_etf], page_size=20)
+```
+
+### 字段类型说明 / Field Types
+
+| 类型 | 导入路径 | 适用场景 | 是否需要 period |
+|------|---------|---------|----------------|
+| `StockField` | `filter_fields.StockField` | 价格、成交量、市值、PE等实时指标 | 否 |
+| `AccumulateField` | `filter_fields.AccumulateField` | ROE、营收增长、涨跌幅（带周期）| 是（`accumulate_period`）|
+| `FinancialField` | `filter_fields.FinancialField` | LTM 财务指标（净利率、ROE等）| 固定 `FinancialPeriod.LTM` |
+| `MultiTagField` | `filter_fields.MultiTagField` | 行业、概念、期权可用等标签 | 否（`tag_list`）|
+
+### 常用字段速查 / Common Fields
+
+**StockField（价格/市场数据）**
+
+| 字段 | 说明 |
+|------|-----|
 | `MarketValue` | 总市值 Total market cap |
+| `FloatMarketVal` | 流通市值 Float market cap |
+| `current_ChangeRate` | 今日涨跌幅% Intraday change rate |
+| `Volume` | 成交量 Volume |
+| `Amount` | 成交额 Turnover amount |
+| `TurnoverRate` | 换手率 Turnover rate |
+| `PeTTM` | 市盈率 TTM P/E ratio |
+| `CurPrice` | 最新价 Latest price |
+| `Week52High` / `Week52Low` | 52周高/低 52-week high/low |
+
+**AccumulateField（需指定 `accumulate_period`）**
+
+| 字段 | 说明 | 值说明 |
+|------|-----|-------|
+| `ChangeRate` | 涨跌幅（含周期）| 百分比数值，如 5.0 |
+| `ROE` | 净资产收益率 | 小数，如 0.15 = 15% |
+| `ROA` | 总资产收益率 | 小数 |
+| `NetIncome_Ratio_Annual` | 净利润同比增长率 | 百分比 |
+| `GrossProfitRate` | 毛利率 | 小数 |
+| `Total_Revenue` | 营业收入 | 绝对值 |
+
+**AccumulatePeriod 常用值**: `ANNUAL`（年度）、`QUARTERLY`（季度）、`SEMIANNUAL`（半年）、`Five_Days`、`Beginning_Of_The_Year_To_Now`
+
+```bash
+# CLI
+# 今日涨幅 > 3%, 按涨幅降序
+tigeropen quote scanner --filter current_ChangeRate:3: --sort current_ChangeRate --sort-dir DESC --limit 20
+
+# 大市值且 PE < 30（美股）
+tigeropen quote scanner --filter MarketValue:1e10: --filter PeTTM::30 --sort MarketValue --limit 20
+
+# 高 ROE 筛选（年度，ROE > 15%）
+tigeropen quote scanner --filter acc.ROE:0.15::ANNUAL --sort acc.ROE:ANNUAL --sort-dir DESC --limit 20
+
+# 港股选股
+tigeropen quote scanner --market HK --filter MarketValue:1e9: --sort MarketValue --limit 20
+
+# 大市值 + 高 ROE + 低 PE（组合筛选）
+tigeropen quote scanner --filter MarketValue:1e10: --filter acc.ROE:0.15::ANNUAL --filter PeTTM::30 --sort MarketValue --limit 20
+```
+
+> **filter 格式 / Filter format**:
+> - `FIELD:min:max` — StockField 范围，如 `MarketValue:1e9:1e12`、`PeTTM::20`
+> - `acc.FIELD:min:max:PERIOD` — AccumulateField，如 `acc.ROE:0.15::ANNUAL`
+> - `fin.FIELD:min:max` — FinancialField (LTM)，如 `fin.ReturnOnEquityRate:0.15:`
+> - `tag.FIELD:tag1,tag2` — MultiTagField，如 `tag.OptionsAvailable:1`
 
 ---
 

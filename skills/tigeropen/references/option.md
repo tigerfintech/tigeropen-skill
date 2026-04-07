@@ -4,6 +4,30 @@
 > 中文 | English — 双语技能。Bilingual skill.
 > 官方文档 Docs: https://docs.itigerup.com/docs/quote-option
 
+## 期权操作工作流 / Option Workflow
+<!-- 当用户提到 "期权"、"期权链"、"到期日"、"行权价"、"Greeks"、"Call"、"Put"、"看涨"、"看跌"、"option"、"option chain"、"expiration"、"strike" 时 -->
+
+当用户提到期权时，按以下流程操作 / When user mentions options, follow this workflow:
+
+### 查询期权 / Query Options
+
+1. **查到期日 Get expirations**: `get_option_expirations()` → 获取可选到期日列表 / Get available expiration dates
+2. **查期权链 Get chain**: `get_option_chain()` → 获取指定到期日的所有合约，可用 `OptionFilter` 筛选 / Get all contracts for a given expiry, filter with `OptionFilter`
+3. **查行情 Get quotes**: `get_option_briefs()` → 获取期权实时行情和希腊字母 / Get real-time quotes and Greeks
+
+### 期权交易 / Option Trading
+
+1. **构造合约 Build contract**: `option_contract_by_symbol(symbol, expiry, strike, put_call, currency)`
+2. **预览订单 Preview**: `preview_order()` → 确认保证金和佣金 / Confirm margin and commission
+3. **下单 Place order**: `place_order()` → 期权数量单位为"张" / Option quantity is in "contracts"
+
+### 港股期权特殊处理 / HK Option Special Handling
+
+- 港股期权标的代码不同于正股 / HK option underlyings differ from stock codes: `00700` → `TCH`（腾讯）
+- 使用 `get_option_symbols()` 查询港股期权代码映射 / Use `get_option_symbols()` for HK option symbol mapping
+
+---
+
 ## 初始化 / Initialize
 
 ```python
@@ -69,6 +93,32 @@ chain = quote_client.get_option_chain(
 | `volume_min/max` | 成交量范围 Volume |
 | `in_the_money` | 是否实值 In the money (True/False) |
 
+**get_option_chain 返回字段 / Return Fields** (pandas.DataFrame, 21列):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `identifier` | 期权完整代码 (e.g. `AAPL  250829C00150000`) |
+| `symbol` | 标的代码 Underlying symbol |
+| `expiry` | 到期日毫秒时间戳 Expiration timestamp (ms) |
+| `strike` | 行权价 Strike price |
+| `put_call` | `CALL`(看涨) / `PUT`(看跌) |
+| `multiplier` | 乘数（美股通常100） Option multiplier |
+| `ask_price` | 卖价 Ask price |
+| `ask_size` | 卖量 |
+| `bid_price` | 买价 Bid price |
+| `bid_size` | 买量 |
+| `pre_close` | 前收盘价 Previous close |
+| `latest_price` | 最新价 Latest price |
+| `volume` | 成交量 Volume |
+| `open_interest` | 未平仓合约数 Open interest |
+| `last_timestamp` | 最后交易时间戳（毫秒） Last trade time (ms) |
+| `implied_vol` | 隐含波动率 Implied volatility |
+| `delta` | Delta（需 `return_greek_value=True`）|
+| `gamma` | Gamma |
+| `theta` | Theta（每日时间价值损耗，通常为负值） |
+| `vega` | Vega（波动率敏感度） |
+| `rho` | Rho（利率敏感度） |
+
 ---
 
 ## 港股期权 / HK Options
@@ -92,9 +142,6 @@ chain = quote_client.get_option_chain(symbol='TCH.HK', expiry='2025-06-18', mark
 ```python
 # 实时行情 / Real-time quotes
 briefs = quote_client.get_option_briefs(identifiers=['AAPL  250829C00150000'])
-# 属性: symbol, latest_price, bid_price, ask_price, volume, open_interest, change, change_percent
-# Greeks: delta, gamma, theta, vega, rho, implied_volatility
-# 额外属性: mid_price, mark_price, pre_mark_price, rates_bonds
 
 # K线 / K-lines (支持周期: day, 1min, 5min, 30min, 60min)
 bars = quote_client.get_option_bars(identifiers=['AAPL  250829C00150000'], period='day')
@@ -110,6 +157,38 @@ ticks = quote_client.get_option_trade_ticks(identifiers=['AAPL  250829C00150000'
 timeline = quote_client.get_option_timeline(identifiers=['AAPL  250829C00150000'])
 # HK 期权: quote_client.get_option_timeline(identifiers=['TCH.HK250828C00610000'], market='HK')
 ```
+
+**get_option_briefs 返回字段 / Return Fields** (pandas.DataFrame, 27列):
+
+| 字段 Field | 说明 Description |
+|-----------|-----------------|
+| `identifier` | 期权完整代码 Full option identifier |
+| `symbol` | 标的代码 Underlying symbol |
+| `expiry` | 到期日毫秒时间戳 |
+| `strike` | 行权价 Strike price |
+| `put_call` | `CALL` / `PUT` |
+| `multiplier` | 乘数 Option multiplier |
+| `ask_price` | 卖价 Ask price |
+| `ask_size` | 卖量 Ask size |
+| `bid_price` | 买价 Bid price |
+| `bid_size` | 买量 Bid size |
+| `pre_close` | 前收价 Previous close |
+| `latest_price` | 最新价 Latest price |
+| `latest_time` | 最新交易时间 Latest trade time |
+| `volume` | 成交量 Volume |
+| `open_interest` | 未平仓数量 Open interest |
+| `open` | 开盘价 Open price |
+| `high` | 最高价 High price |
+| `low` | 最低价 Low price |
+| `change` | 价格变动 Price change |
+| `volatility` | 历史波动率 Historical volatility |
+| `rates_bonds` | 无风险利率 Risk-free interest rate |
+| `mid_price` | 买卖中间价 Mid price (ask+bid)/2 |
+| `mid_timestamp` | 中间价时间戳 Mid price timestamp (ms) |
+| `mark_price` | 标记价格 Mark price |
+| `mark_timestamp` | 标记价格时间戳 Mark price timestamp (ms) |
+| `pre_mark_price` | 前标记价格 Previous mark price |
+| `selling_return` | 卖出收益率 Selling return (for covered call/cash-secured put) |
 
 ### 期权代码格式 / Option Symbol Format
 
