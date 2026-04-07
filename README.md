@@ -4,6 +4,8 @@
 
 > 遵循 [Agent Skills](https://agentskills.io) 开放标准，支持 Claude Code、Cursor、Gemini CLI、GitHub Copilot、VS Code、OpenAI Codex、OpenClaw 等 40+ AI 工具。
 
+> ⚠️ 使用本插件前请阅读 [风险提示与免责声明](./DISCLAIMER.md)
+
 ---
 
 ## 中文
@@ -153,6 +155,8 @@ tigeropen-skill/
 ### Introduction
 
 This repository contains complete AI skill plugins for the Tiger Brokers OpenAPI, supporting both **Python SDK** and **Java SDK**. Once imported, AI coding tools (Claude Code, Cursor, etc.) can help you query market data, place orders, manage accounts, and more through natural language.
+
+> ⚠️ Please read the [Risk Disclosure and Disclaimer](./DISCLAIMER.md) before using this plugin.
 
 ### Install
 
