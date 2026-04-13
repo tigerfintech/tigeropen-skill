@@ -100,6 +100,14 @@ env=PROD
 # secret_key=your_secret_key
 ```
 
+> ⚠️ **Java SDK 仅读取 `private_key_pk8` 字段（PKCS#8 DER base64）。`private_key_pk1` 字段会被忽略。**
+> Java SDK only reads the `private_key_pk8` field. The `private_key_pk1` field is ignored.
+>
+> 如果持有 PKCS#1 格式私钥，需先转换为 PKCS#8：
+> ```bash
+> openssl pkcs8 -topk8 -inform PEM -outform DER -nocrypt -in pk1.pem | base64 | tr -d '\n'
+> ```
+
 > 港股牌照(TBHK)还需将 `tiger_openapi_token.properties` 放入同一目录。Token 有效期 30 天。
 > HK license (TBHK) also requires `tiger_openapi_token.properties` in the same directory. Token valid for 30 days.
 

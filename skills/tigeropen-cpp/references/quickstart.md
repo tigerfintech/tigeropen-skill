@@ -73,6 +73,15 @@ MIIEpAIBAAKCAQEA...
 account=your_account_number
 ```
 
+> ⚠️ **C++ SDK 仅支持 PKCS#1 PEM 格式**（`-----BEGIN RSA PRIVATE KEY-----` 头尾行）。
+> **不支持** PKCS#8（`-----BEGIN PRIVATE KEY-----`）或裸 Base64 DER 格式。
+>
+> 如果持有 PKCS#8 格式私钥，需先转换为 PKCS#1：
+> ```bash
+> openssl rsa -in pkcs8_private.pem -out pkcs1_private.pem
+> ```
+> 配置文件字段名为 `private_key`（不是 `private_key_pk1` 或 `private_key_pk8`）。
+
 ### 代码加载配置 / Load Config in Code
 
 ```cpp

@@ -433,11 +433,23 @@ def safe_api_call(func, *args, max_retries=3, **kwargs):
 
 ### 私钥格式 / Private Key Format
 
-Python SDK 使用 **PKCS#1** 格式 (以 `-----BEGIN RSA PRIVATE KEY-----` 开头)。
-如果是 PKCS#8 格式（`BEGIN PRIVATE KEY`），需转换：
+Python SDK **同时支持 PKCS#1 和 PKCS#8** 格式（DER base64 裸字符串，无 PEM 头尾行）。
+配置文件字段优先级：`private_key_pk1` 先读，若空则读 `private_key_pk8`。
+
+```properties
+# 任选其一即可 / Either format works:
+private_key_pk1=MIICXQIBAAKBgQD...    # PKCS#1 DER base64
+private_key_pk8=MIICdwIBADANBgk...    # PKCS#8 DER base64
+```
+
+如需转换 PEM → DER base64：
 
 ```bash
-openssl rsa -in pkcs8_key.pem -out pkcs1_key.pem
+# PKCS#1 PEM → DER base64
+openssl rsa -in pk1.pem -outform DER | base64 | tr -d '\n'
+
+# PKCS#8 PEM → DER base64
+openssl pkcs8 -topk8 -inform PEM -outform DER -nocrypt -in pk1.pem | base64 | tr -d '\n'
 ```
 
 ### SSL/证书问题 / SSL Issues
@@ -467,7 +479,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 ## 注意事项 / Notes
 
-- 认证使用 RSA 签名，Python SDK 使用 PKCS#1 格式私钥 / Authentication uses RSA signatures, Python SDK uses PKCS#1 private key
+- 认证使用 RSA 签名，Python SDK 支持 PKCS#1 和 PKCS#8 两种格式（DER base64）/ Authentication uses RSA signatures, Python SDK supports both PKCS#1 and PKCS#8 DER base64
 - 私钥可通过 `read_private_key('path/to/pem')` 读取文件，或直接赋值字符串内容 / Private key via `read_private_key()` or direct string
 - `QuoteClient` 应创建一次并复用 / Create once and reuse
 - 行情权限需单独购买，API 与 App 独立 / Quote permissions require separate purchase
