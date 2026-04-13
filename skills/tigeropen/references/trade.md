@@ -579,19 +579,21 @@ tigeropen trade transaction list --symbol AAPL --limit 20
 
 ```python
 assets = trade_client.get_prime_assets(base_currency='USD', consolidated=True)
-print(f"总资产 Net: {assets.net_liquidation}")
-print(f"可用资金 Available: {assets.available_funds}")
-print(f"购买力 Buying Power: {assets.buying_power}")
-print(f"现金 Cash: {assets.cash}")
-print(f"保证金 Margin: {assets.maintain_margin}")
-print(f"未实现盈亏 Unrealized PnL: {assets.unrealized_pnl}")
-print(f"已实现盈亏 Realized PnL: {assets.realized_pnl}")
-print(f"缓冲比率 Cushion: {assets.cushion}")
+# ⚠️ 资产字段在 segments 字典中，不在 assets 对象上
+# Fields are on segment objects, NOT directly on assets
+# segments 键: 'S'=证券(Standard), 'G'=环球(Global), 'C'=商品/期货, 'F'=基金, 'D'=数字货币
+seg = assets.segments.get('S') or assets.segments.get('G')
+print(f"总资产 Net: {seg.net_liquidation}")
+print(f"可用资金 Available: {seg.cash_available_for_trade}")
+print(f"购买力 Buying Power: {seg.buying_power}")
+print(f"现金 Cash: {seg.cash_balance}")
+print(f"维持保证金 Margin: {seg.maintain_margin}")
+print(f"未实现盈亏 Unrealized PnL: {seg.unrealized_pl}")
+print(f"已实现盈亏 Realized PnL: {seg.realized_pl}")
 
-# 按板块 / By segment
-# assets.segments 包含 S(证券), C(商品/期货), F(基金), D(数字货币) 板块
-# 每个 Segment 有 cash_balance, cash_available_for_trade, net_liquidation 等
 # 每个 Segment.currency_assets 包含各币种明细
+for currency, ca in seg.currency_assets.items():
+    print(f"  {currency}: net={ca.net_liquidation}, forex_rate={ca.forex_rate}")
 ```
 
 ### Segment 关键字段 / Segment Key Fields
