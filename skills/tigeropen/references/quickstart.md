@@ -193,8 +193,9 @@ for s in status:
 
 # 4. 获取实时行情 / Get real-time quotes
 briefs = quote_client.get_stock_briefs(['AAPL', 'TSLA'])
-for b in briefs:
-    print(f"{b.symbol}: price={b.latest_price}, change={b.change_percent}%")
+# get_stock_briefs returns a pandas DataFrame
+for _, b in briefs.iterrows():
+    print(f"{b['symbol']}: price={b['latest_price']}, change={b['change_percentage']}%")
 
 # 5. 获取K线 / Get K-line data
 bars = quote_client.get_bars(['AAPL'], period=BarPeriod.DAY, limit=30)
@@ -202,12 +203,15 @@ print(bars.tail())
 
 # 6. 查看账户 / Check account
 assets = trade_client.get_prime_assets(base_currency='USD')
-print(f"Net Liquidation: {assets.net_liquidation}, Available: {assets.available_funds}")
+# Access via segments dict: 'S' = 综合(Standard), 'G' = 环球(Global)
+segment = assets.segments.get('S') or assets.segments.get('G')
+if segment:
+    print(f"Net Liquidation: {segment.net_liquidation}, Available: {segment.cash_available_for_trade}")
 
 # 7. 查看持仓 / Check positions
 positions = trade_client.get_positions()
 for p in positions:
-    print(f"{p.contract.symbol}: qty={p.qty}, pnl={p.unrealized_pnl}")
+    print(f"{p.contract.symbol}: qty={p.quantity}, pnl={p.unrealized_pnl}")
 ```
 
 ## 核心模块 / Core Modules
@@ -284,19 +288,28 @@ from tigeropen.common.consts import (
 
 ### PortfolioAccount 资产对象 (get_prime_assets)
 
+`get_prime_assets()` 返回 `PortfolioAccount` 对象，资产数据在 `segments` 字典中：
+
+```python
+assets = trade_client.get_prime_assets(base_currency='USD')
+# segments 键: 'S' = 综合账户(Standard), 'G' = 环球账户(Global)
+segment = assets.segments.get('S') or assets.segments.get('G')
+print(f"Net: {segment.net_liquidation}, Cash: {segment.cash_balance}")
+```
+
 | 属性 Attribute | 说明 Description |
 |---------------|-----------------|
-| `net_liquidation` | 总资产/净清算值 Net liquidation value |
-| `available_funds` | 可用资金 Available funds |
-| `buying_power` | 购买力 Buying power |
-| `cash` | 现金 Cash balance |
-| `excess_liquidity` | 剩余流动性 Excess liquidity |
-| `cushion` | 缓冲比率 Cushion ratio |
-| `init_margin` | 初始保证金 Initial margin |
-| `maintain_margin` | 维持保证金 Maintenance margin |
-| `unrealized_pnl` | 未实现盈亏 Unrealized P&L |
-| `realized_pnl` | 已实现盈亏 Realized P&L |
-| `gross_position_value` | 总持仓价值 Gross position value |
+| `segments` | 账户分组字典 `{'S': ..., 'G': ...}` |
+| `segment.net_liquidation` | 总资产/净清算值 Net liquidation value |
+| `segment.cash_balance` | 现金 Cash balance |
+| `segment.cash_available_for_trade` | 可用资金 Available funds for trading |
+| `segment.buying_power` | 购买力 Buying power |
+| `segment.gross_position_value` | 总持仓价值 Gross position value |
+| `segment.unrealized_pl` | 未实现盈亏 Unrealized P&L |
+| `segment.realized_pl` | 已实现盈亏 Realized P&L |
+| `segment.init_margin` | 初始保证金 Initial margin |
+| `segment.maintain_margin` | 维持保证金 Maintenance margin |
+| `segment.currency_assets` | 多币种资产明细 dict {currency: CurrencyAsset} |
 
 ### Position 持仓对象
 

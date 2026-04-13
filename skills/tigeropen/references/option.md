@@ -128,7 +128,11 @@ HK option underlying symbols differ from stock codes; map first.
 
 ```python
 # 获取映射 / Get mapping (e.g. 00700 -> TCH.HK)
-hk_symbols = quote_client.get_option_symbols(market='HK')
+# 返回 DataFrame: columns=['symbol'(期权代码), 'name', 'underlying_symbol'(正股代码)]
+hk_symbols_df = quote_client.get_option_symbols(market='HK')
+# 查找腾讯 / Find Tencent:
+tencent = hk_symbols_df[hk_symbols_df['underlying_symbol'] == '00700'].iloc[0]
+option_symbol = tencent['symbol']  # e.g. 'TCH.HK'
 
 # 使用映射后的代码 / Use mapped symbol
 expirations = quote_client.get_option_expirations(symbols=['TCH.HK'], market='HK')
@@ -392,6 +396,185 @@ order = combo_order(account=client_config.account, legs=legs,
 trade_client.place_order(order)
 ```
 
+### 熊市看跌价差 / Bear Put Spread (VERTICAL)
+
+方向性策略，预期股价下跌，有限盈利有限亏损。
+
+```python
+# 买高行权价Put，卖低行权价Put（净支出）
+legs = [
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=155.0, put_call='PUT', action='BUY', ratio=1),
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=145.0, put_call='PUT', action='SELL', ratio=1),
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='VERTICAL', action='BUY',
+                    quantity=1, order_type='LMT', limit_price=4.0)
+trade_client.place_order(order)
+```
+
+---
+
+### 牛市看跌价差（信用价差）/ Bull Put Spread (Credit Spread)
+
+卖出实值Put，买入更低行权价Put保护，收取权利金净信用，预期股价维持或上涨。
+
+```python
+# 卖高行权价Put，买低行权价Put（净收入信用）
+legs = [
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=145.0, put_call='PUT', action='SELL', ratio=1),  # 卖Put收信用
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=135.0, put_call='PUT', action='BUY', ratio=1),   # 买Put限风险
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='VERTICAL', action='SELL',
+                    quantity=1, order_type='LMT', limit_price=2.50)
+# limit_price 为净收入信用（正值），max_loss = (145-135)*100 - 250 = 750
+trade_client.place_order(order)
+```
+
+---
+
+### 熊市看涨价差（信用价差）/ Bear Call Spread (Credit Spread)
+
+卖出虚值Call，买入更高行权价Call保护，预期股价维持或下跌。
+
+```python
+# 卖低行权价Call，买高行权价Call
+legs = [
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=165.0, put_call='CALL', action='SELL', ratio=1),
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=175.0, put_call='CALL', action='BUY', ratio=1),
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='VERTICAL', action='SELL',
+                    quantity=1, order_type='LMT', limit_price=2.00)
+trade_client.place_order(order)
+```
+
+---
+
+### 铁鹰策略 / Iron Condor
+
+同时卖出 Bull Put Spread + Bear Call Spread，适合区间震荡行情，收取双边权利金。
+
+```python
+# Iron Condor = Bull Put Spread + Bear Call Spread（4条腿，用 CUSTOM）
+legs = [
+    # Put spread（下方保护）
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=140.0, put_call='PUT', action='BUY', ratio=1),   # 买低Put
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=150.0, put_call='PUT', action='SELL', ratio=1),  # 卖高Put
+    # Call spread（上方保护）
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=165.0, put_call='CALL', action='SELL', ratio=1), # 卖低Call
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=175.0, put_call='CALL', action='BUY', ratio=1),  # 买高Call
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='CUSTOM', action='SELL',
+                    quantity=1, order_type='LMT', limit_price=3.50)
+# limit_price = 净收入信用（正值）
+# max_profit = 350（股价到期在 150-165 区间内）
+# max_loss = (165-150)*100 - 350 = 1150（突破任一侧边界）
+trade_client.place_order(order)
+```
+
+---
+
+### 铁蝴蝶策略 / Iron Butterfly
+
+卖出同行权价的 Straddle，再分别买入两侧保护，适合极低波动率预期，比 Iron Condor 收入更高但区间更窄。
+
+```python
+atm_strike = 155.0  # ATM 行权价（接近当前股价）
+legs = [
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=145.0, put_call='PUT', action='BUY', ratio=1),   # 买下方Put
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=atm_strike, put_call='PUT', action='SELL', ratio=1),  # 卖ATM Put
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=atm_strike, put_call='CALL', action='SELL', ratio=1), # 卖ATM Call
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=165.0, put_call='CALL', action='BUY', ratio=1),  # 买上方Call
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='CUSTOM', action='SELL',
+                    quantity=1, order_type='LMT', limit_price=6.00)
+trade_client.place_order(order)
+```
+
+---
+
+### 穷人备兑开仓 / Poor Man's Covered Call (PMCC)
+
+用深度实值的长期 LEAPS Call 替代持有正股，成本更低，结构类似 Covered Call。
+
+```python
+# 买入远期深度实值Call（LEAPS，delta ~0.7-0.9），替代持股
+# 卖出近期虚值Call收取权利金
+legs = [
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20270117',  # 远期 ~1.5年
+                 strike=120.0, put_call='CALL', action='BUY', ratio=1),  # 深度实值
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',  # 近期 ~1个月
+                 strike=165.0, put_call='CALL', action='SELL', ratio=1), # 虚值
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='DIAGONAL', action='BUY',
+                    quantity=1, order_type='LMT', limit_price=28.0)
+# 注意: 近月Call行权价必须 > 远月Call行权价，否则存在最大亏损为负的风险
+trade_client.place_order(order)
+```
+
+---
+
+### 合成股票 / Synthetic Stock (SYNTHETIC)
+
+买Call卖同行权价Put，经济效果等同于持有100股，资金占用更少。
+
+```python
+# 合成多头（等同于持股）: 买Call + 卖Put，同行权价同到期日
+legs = [
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=150.0, put_call='CALL', action='BUY', ratio=1),
+    contract_leg(symbol='AAPL', sec_type='OPT', expiry='20250829',
+                 strike=150.0, put_call='PUT', action='SELL', ratio=1),
+]
+order = combo_order(account=client_config.account, legs=legs,
+                    combo_type='SYNTHETIC', action='BUY',
+                    quantity=1, order_type='LMT', limit_price=0.50)
+# 合成空头: 两腿 action 均改为相反（卖Call+买Put）
+trade_client.place_order(order)
+```
+
+---
+
+### 常用策略对比速查 / Strategy Quick Reference
+
+| 策略 Strategy | 方向 Bias | 盈亏结构 | 风险 Risk | 典型用途 Use Case |
+|--------------|-----------|---------|-----------|-----------------|
+| Bull Call Spread | 温和看涨 | 有限盈亏 | 有限（净支出） | 方向性，控制成本 |
+| Bear Put Spread | 温和看跌 | 有限盈亏 | 有限（净支出） | 方向性下行保护 |
+| Bull Put Spread | 温和看涨/中性 | 有限盈亏 | 有限（净收入） | 收取权利金，高胜率 |
+| Bear Call Spread | 温和看跌/中性 | 有限盈亏 | 有限（净收入） | 收取权利金，高胜率 |
+| Iron Condor | 中性区间震荡 | 有限盈亏 | 有限 | 低波动率环境，双边收费 |
+| Iron Butterfly | 极度中性 | 有限盈亏 | 有限 | 极低波动预期，权利金最高 |
+| Straddle（买） | 高波动预期 | 无限盈利 | 有限（净支出） | 财报/事件驱动 |
+| Strangle（买） | 高波动预期 | 无限盈利 | 有限（更低成本） | 财报/事件驱动 |
+| Covered Call | 温和看涨/持股 | 有限盈利 | 持股风险 | 持股增收 |
+| Sell Put / CSP | 温和看涨 | 有限盈利 | 较大（行权买股） | 目标价买入+收费 |
+| PMCC | 温和看涨 | 有限盈利 | 有限 | 低成本备兑替代 |
+| Wheel Strategy | 温和看涨 | 稳定收租 | 行权买股 | 长期稳定增收 |
+| Calendar Spread | 中性/轻方向 | 有限盈亏 | 有限 | 时间价值套利 |
+| Diagonal Spread | 轻方向 | 有限盈亏 | 有限 | 方向性时间套利 |
+| Synthetic Stock | 强方向 | 无限盈亏 | 较大 | 杠杆替代持股 |
+
+---
+
 ### 组合策略类型总览 / Combo Strategy Types
 
 | ComboType | 策略 Strategy | 说明 Description |
@@ -479,6 +662,307 @@ option_util = OptionUtil(client_config=client_config)
 # 输入期权代码，自动查询市场数据计算
 metrics = option_util.calculate('TSLA 260220C00385000')
 # 返回: Greeks, profit_probability(盈利概率), annualized_return_for_selling(卖出年化收益率), leverage_ratio(杠杆比率)
+```
+
+---
+
+## 复杂业务场景 / Advanced Strategy Scenarios
+
+### Wheel Strategy（车轮策略）概述
+
+Wheel Strategy = **Sell Put → 被行权后持有股票 → Sell Covered Call → 反复循环**
+
+```
+阶段1: Sell Cash-Secured Put
+  └── 若未被行权 → 收保证金，重复卖Put
+  └── 若被行权   → 以行权价买入股票
+         |
+阶段2: Sell Covered Call
+  └── 若未被行权 → 收权利金，重复卖Call
+  └── 若被行权   → 以行权价卖出股票，回到阶段1
+```
+
+**策略目标**: 持续通过卖出期权收取权利金，降低实际持股成本。
+
+---
+
+### 场景一：扫描股票池的 Sell Put 机会
+
+扫描一组股票，找出近期到期、Delta 合适、权利金收益率高的 Put 合约。
+
+```python
+import pandas as pd
+from tigeropen.tiger_open_config import TigerOpenClientConfig
+from tigeropen.quote.quote_client import QuoteClient
+from tigeropen.quote.domain.filter import OptionFilter
+
+client_config = TigerOpenClientConfig(props_path='/path/to/config/')
+quote_client = QuoteClient(client_config=client_config)
+
+# 1. 定义股票池
+watchlist = ['AAPL', 'MSFT', 'TSLA', 'NVDA', 'AMD']
+
+# 2. 筛选参数（根据策略调整）
+DELTA_MIN = -0.35     # Put delta 为负，-0.35 表示约 35% 被行权概率
+DELTA_MAX = -0.15     # 偏保守，目标 delta 在 -0.15 ~ -0.35
+IV_MIN = 0.20         # 过滤低波动率标的（权利金太少）
+OI_MIN = 100          # 最小持仓量，保证流动性
+VOLUME_MIN = 10
+DAYS_TO_EXPIRY = 30   # 目标到期天数（21-45天最佳）
+
+# 3. 查询各标的的近期到期日
+def get_target_expiry(symbol, target_days=DAYS_TO_EXPIRY):
+    """找距当前最接近目标天数的到期日"""
+    import datetime
+    expirations = quote_client.get_option_expirations(symbols=[symbol], market='US')
+    today = datetime.date.today()
+    target_date = today + datetime.timedelta(days=target_days)
+
+    # 筛选月度期权（period_tag='m'），找最近的
+    monthly = expirations[expirations['period_tag'] == 'm'].copy()
+    monthly['date'] = pd.to_datetime(monthly['date']).dt.date
+    monthly['diff'] = (monthly['date'] - target_date).abs()
+
+    if monthly.empty:
+        return None
+    best = monthly.loc[monthly['diff'].idxmin()]
+    return str(best['date'])
+
+# 4. 扫描每个标的
+opportunities = []
+
+for symbol in watchlist:
+    try:
+        expiry = get_target_expiry(symbol)
+        if not expiry:
+            continue
+
+        # 查询 Put 期权链，按 delta 筛选
+        option_filter = OptionFilter(
+            delta_min=DELTA_MIN,
+            delta_max=DELTA_MAX,
+            implied_volatility_min=IV_MIN,
+            open_interest_min=OI_MIN,
+            volume_min=VOLUME_MIN,
+        )
+        chain = quote_client.get_option_chain(
+            symbol=symbol,
+            expiry=expiry,
+            option_filter=option_filter,
+            return_greek_value=True,
+            market='US'
+        )
+
+        if chain is None or chain.empty:
+            continue
+
+        # 只取 PUT
+        puts = chain[chain['put_call'] == 'PUT'].copy()
+        if puts.empty:
+            continue
+
+        # 计算关键指标
+        puts['mid_price'] = (puts['bid_price'] + puts['ask_price']) / 2
+        puts['bid_ask_spread'] = puts['ask_price'] - puts['bid_price']
+        puts['bid_ask_ratio'] = puts['bid_ask_spread'] / puts['mid_price']
+        # 年化权利金收益率 = 权利金/行权价 * (365/天数)
+        import datetime
+        today = datetime.date.today()
+        expiry_date = datetime.date.fromisoformat(expiry)
+        days_left = (expiry_date - today).days
+        puts['premium_yield'] = (puts['bid_price'] / puts['strike']) * (365 / max(days_left, 1))
+
+        # 流动性过滤: bid/ask 价差不超过 mid 的 30%
+        liquid = puts[puts['bid_ask_ratio'] < 0.30]
+
+        if liquid.empty:
+            continue
+
+        # 按年化收益率排序，取最优
+        best = liquid.sort_values('premium_yield', ascending=False).head(3)
+        best['underlying'] = symbol
+        best['expiry_date'] = expiry
+        best['days_left'] = days_left
+        opportunities.append(best)
+
+    except Exception as e:
+        print(f"Skip {symbol}: {e}")
+        continue
+
+# 5. 汇总结果
+if opportunities:
+    result = pd.concat(opportunities, ignore_index=True)
+    display_cols = [
+        'underlying', 'expiry_date', 'days_left', 'strike', 'delta',
+        'bid_price', 'ask_price', 'mid_price', 'implied_vol',
+        'open_interest', 'volume', 'premium_yield'
+    ]
+    result = result[display_cols].sort_values('premium_yield', ascending=False)
+    print(result.to_string(index=False))
+else:
+    print("No opportunities found.")
+```
+
+**输出示例 / Sample Output**:
+
+```
+underlying expiry_date  days_left  strike  delta  bid_price  ask_price  mid_price  implied_vol  open_interest  volume  premium_yield
+      NVDA  2025-05-16         38   800.0  -0.28       8.50      9.00       8.75       0.420          1523     312          0.418
+      TSLA  2025-05-16         38   220.0  -0.25       4.20      4.50       4.35       0.510           892     245          0.389
+      AAPL  2025-05-16         38   170.0  -0.22       1.80      2.00       1.90       0.280          2104     567          0.215
+```
+
+---
+
+### 场景二：执行 Sell Put 下单
+
+从扫描结果中选择目标合约并下单：
+
+```python
+from tigeropen.common.util.contract_utils import option_contract_by_symbol
+from tigeropen.common.util.order_utils import limit_order
+from tigeropen.trade.trade_client import TradeClient
+
+trade_client = TradeClient(client_config=client_config)
+
+# ⚠️ 默认使用模拟账户，实盘需用户确认
+account = client_config.account
+
+# 选择目标 Put 合约
+symbol = 'NVDA'
+expiry = '20250516'   # YYYYMMDD 格式
+strike = 800.0
+limit_price = 8.50    # 以 bid 价卖出（保守），或 mid 价（激进）
+quantity = 1          # 1张 = 100股
+
+# 构造合约
+put_contract = option_contract_by_symbol(
+    symbol=symbol,
+    expiry=expiry,
+    strike=strike,
+    put_call='PUT',
+    currency='USD'
+)
+
+# 卖出 Put
+order = limit_order(
+    account=account,
+    contract=put_contract,
+    action='SELL',
+    quantity=quantity,
+    limit_price=limit_price
+)
+
+# 预览（建议先预览确认保证金）
+preview = trade_client.preview_order(order)
+print(f"预估保证金: {preview.init_margin}")
+print(f"预估佣金: {preview.commission}")
+
+# 确认后下单
+result = trade_client.place_order(order)
+print(f"订单ID: {result.id}, 状态: {result.status}")
+```
+
+---
+
+### 场景三：监控持仓并执行 Covered Call（Wheel 第二阶段）
+
+当 Sell Put 被行权，持有正股后，自动寻找 Covered Call 机会：
+
+```python
+from tigeropen.common.consts import SecurityType
+
+# 1. 查询当前期权持仓（监控被行权的 Put）
+opt_positions = trade_client.get_positions(sec_type=SecurityType.OPT)
+assigned_symbols = []
+
+for pos in opt_positions:
+    c = pos.contract
+    # Put 被行权后会消失，但持有对应的正股
+    print(f"期权持仓: {c.symbol} {c.expiry} {c.strike} {c.put_call} qty={pos.qty}")
+
+# 2. 查询正股持仓（被行权后的股票）
+stk_positions = trade_client.get_positions(sec_type=SecurityType.STK)
+
+for pos in stk_positions:
+    symbol = pos.contract.symbol
+    qty = pos.qty
+    avg_cost = pos.average_cost
+
+    if qty < 100:  # 至少持有100股才能卖1张Covered Call
+        continue
+
+    max_contracts = qty // 100  # 可卖的最大张数
+
+    print(f"\n{symbol}: 持有 {qty}股, 均价 ${avg_cost:.2f}, 可卖 {max_contracts} 张 Covered Call")
+
+    # 3. 查询 OTM Call 期权（行权价 > 当前价格，略高于持仓成本）
+    expiry = get_target_expiry(symbol)  # 使用前面定义的函数
+    if not expiry:
+        continue
+
+    call_filter = OptionFilter(
+        delta_min=0.20,   # Call delta 0.20-0.35 （约20-35%被行权概率）
+        delta_max=0.35,
+        open_interest_min=50,
+        volume_min=5,
+    )
+    chain = quote_client.get_option_chain(
+        symbol=symbol, expiry=expiry,
+        option_filter=call_filter,
+        return_greek_value=True, market='US'
+    )
+
+    if chain is None or chain.empty:
+        continue
+
+    calls = chain[chain['put_call'] == 'CALL'].copy()
+    if calls.empty:
+        continue
+
+    # 筛选行权价高于均价（避免亏损卖出股票）
+    calls = calls[calls['strike'] > avg_cost]
+
+    if calls.empty:
+        print(f"  {symbol}: 无合适的 Covered Call 合约（所有行权价低于持仓均价）")
+        continue
+
+    # 按权利金收益率排序
+    calls['mid_price'] = (calls['bid_price'] + calls['ask_price']) / 2
+    calls = calls.sort_values('mid_price', ascending=False)
+
+    best_call = calls.iloc[0]
+    print(f"  推荐 Covered Call: 行权价 ${best_call['strike']:.1f}, "
+          f"Delta={best_call['delta']:.2f}, "
+          f"权利金 bid=${best_call['bid_price']:.2f}")
+```
+
+---
+
+### Wheel Strategy 关键参数选择指南
+
+| 参数 | 保守型 | 平衡型 | 激进型 |
+|------|--------|--------|--------|
+| Put Delta | -0.15 ~ -0.20 | -0.25 ~ -0.30 | -0.35 ~ -0.40 |
+| Call Delta | 0.20 ~ 0.25 | 0.25 ~ 0.35 | 0.35 ~ 0.45 |
+| 到期天数 DTE | 45-60 天 | 30-45 天 | 14-30 天 |
+| IV 要求 | IV Rank > 30% | IV Rank > 20% | 无特殊要求 |
+| 流动性 | OI > 500 | OI > 100 | OI > 50 |
+
+**止损原则**: 当期权市值达到权利金的 2-3 倍时考虑平仓止损。
+
+```python
+# 检查是否需要止损
+for pos in opt_positions:
+    if pos.qty < 0:  # 持有空头期权（卖出方）
+        entry_credit = abs(pos.average_cost)  # 收到的权利金（每股）
+        current_price = pos.market_price       # 当前期权价格
+        loss_ratio = current_price / entry_credit
+
+        if loss_ratio > 2.0:  # 亏损超过2倍权利金
+            c = pos.contract
+            print(f"⚠️ 止损警告: {c.symbol} {c.strike}{c.put_call} "
+                  f"当前亏损 {loss_ratio:.1f}x 权利金，考虑平仓")
 ```
 
 ---

@@ -137,8 +137,8 @@ contract.setMultiplier(1.0D);
 
 // 数字货币 / Crypto
 ContractItem contract = new ContractItem();
-contract.setSymbol("CC");
-contract.setSecType("BTC.USD");
+contract.setSymbol("BTC/USD");    // actual crypto symbol
+contract.setSecType("CC");         // security type = Cryptocurrency
 
 // 基金 / Fund
 ContractItem contract = new ContractItem();

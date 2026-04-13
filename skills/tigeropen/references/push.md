@@ -27,11 +27,11 @@ push_client = PushClient(host, port, use_ssl=(protocol == 'ssl'), use_protobuf=T
 ```python
 def on_quote_changed(frame):
     """股票/期货行情变动 Stock/future quote change"""
-    print(f"{frame.symbol}: price={frame.latest_price}, "
-          f"change%={frame.latest_change_percent}, volume={frame.volume}")
-    # 属性: symbol, latest_price, latest_change, latest_change_percent, volume, amount,
-    #       open, high, low, pre_close, latest_time, market_status
-    # 盘前盘后: hour_trading_latest_price, hour_trading_change_percent, hour_trading_volume
+    # ⚠️ 使用 protobuf 时字段名为 camelCase / protobuf mode fields are camelCase
+    print(f"{frame.symbol}: price={frame.latestPrice}, volume={frame.volume}")
+    # protobuf 字段 / protobuf fields: symbol, latestPrice, volume, amount,
+    #   open, high, low, preClose, latestTime, marketStatus, identifier
+    # 盘前盘后 / Extended hours: hourTradingTag
 ```
 
 ### 买卖盘口(BBO)变动 / Quote BBO Change
@@ -154,13 +154,17 @@ def on_option_top_changed(frame):
 ### 连接/断开/错误回调 / Connection Callbacks
 
 ```python
-def on_connected():
-    """连接成功 Connected"""
+def on_connected(frame):
+    """连接成功 Connected — frame 参数必须接收 / frame arg required"""
     print("Push connected")
+    # ⚠️ 在此处执行订阅 / Subscribe here after connection established
+    push_client.subscribe_quote(['AAPL', 'TSLA'])
 
-def on_disconnected():
+def on_disconnected(frame=None):
     """断开连接 Disconnected (自动重连 auto-reconnects)"""
     print("Push disconnected, will auto-reconnect")
+    # ⚠️ 重连后订阅不会自动恢复，需在 on_connected 中重新订阅
+    # Subscriptions NOT auto-restored on reconnect; re-subscribe in on_connected
 
 def on_error(frame):
     """错误 Error"""
