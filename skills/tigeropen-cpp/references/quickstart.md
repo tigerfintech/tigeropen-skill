@@ -67,20 +67,21 @@ cmake --build . --config Release
 
 ```properties
 tiger_id=your_tiger_id
-private_key=-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA...
------END RSA PRIVATE KEY-----
+private_key_pk8=MIICdwIBADANBgkqhkiG9w0BAQEFAASCAmEwggJd...
 account=your_account_number
 ```
 
-> ⚠️ **C++ SDK 仅支持 PKCS#1 PEM 格式**（`-----BEGIN RSA PRIVATE KEY-----` 头尾行）。
-> **不支持** PKCS#8（`-----BEGIN PRIVATE KEY-----`）或裸 Base64 DER 格式。
+> C++ SDK 同时支持 **PKCS#8**（`private_key_pk8`）和 **PKCS#1**（`private_key_pk1`）格式，优先读取 `private_key_pk8`。
+> 两种格式均可使用裸 Base64 DER 字符串（无需 PEM 头尾行），SDK 会自动识别并添加正确的 PEM 头。
 >
-> 如果持有 PKCS#8 格式私钥，需先转换为 PKCS#1：
+> **PKCS#8 转 PKCS#1：**
 > ```bash
 > openssl rsa -in pkcs8_private.pem -out pkcs1_private.pem
 > ```
-> 配置文件字段名为 `private_key`（不是 `private_key_pk1` 或 `private_key_pk8`）。
+> **PKCS#1 转 PKCS#8：**
+> ```bash
+> openssl pkcs8 -topk8 -inform PEM -outform DER -nocrypt -in pk1.pem | base64 | tr -d '\n'
+> ```
 
 ### 代码加载配置 / Load Config in Code
 

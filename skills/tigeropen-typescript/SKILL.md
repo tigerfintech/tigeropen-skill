@@ -33,6 +33,8 @@ Reply in the user's language. Keep technical terms (code, API names, parameters)
 - **[Market Data](references/quote.md)** — Real-time quotes, K-lines, depth, options, futures
 - **[Trading](references/trade.md)** — Place/modify/cancel orders, positions, assets
 - **[Real-time Push](references/push.md)** — WebSocket push for quotes, orders, positions
+- **[Account Management](references/account.md)** — Account list, assets, positions, fund transfer, deposit/withdrawal
+- **[Options Trading](references/option.md)** — Option chain, expirations, Greeks, multi-leg strategies
 
 ## Quick Start
 
@@ -69,6 +71,8 @@ console.log(orders);
 | Get stock/option/future quotes, K-lines | [quote.md](references/quote.md) |
 | Place/modify/cancel orders, check positions/assets | [trade.md](references/trade.md) |
 | Real-time streaming data via WebSocket | [push.md](references/push.md) |
+| Account info, assets, fund transfer, deposit/withdrawal | [account.md](references/account.md) |
+| Option chain, Greeks, expirations, multi-leg orders | [option.md](references/option.md) |
 
 ## Common Symbols / 常见标的速查
 
