@@ -94,7 +94,7 @@ Get global account assets. For standard/paper accounts, use PrimeAssetRequest in
 
 | 参数 Parameter | 类型 Type | 是否必填 Required | 描述 Description |
 |---------------|----------|----------------|-----------------|
-| account | string | Yes | 用户授权账户 Authorized account, e.g. DU575569 |
+| account | string | Yes | 用户授权账户 Authorized account, e.g. DU000001 |
 | segment | boolean | No | 是否包含证券/期货分类 Include securities/futures segments, 默认 False |
 | market_value | boolean | No | 是否包含分市场市值 Include market values by market, 默认 False，仅环球账户支持 Global only |
 | secret_key | string | No | 交易员密钥，机构用户专用 Trader secret key, institutional only |
@@ -103,7 +103,7 @@ Get global account assets. For standard/paper accounts, use PrimeAssetRequest in
 
 | 名称 Field | 示例 Example | 说明 Description |
 |-----------|-------------|-----------------|
-| account | DU575569 | 交易账户 Trading account |
+| account | DU000001 | 交易账户 Trading account |
 | capability | RegTMargin | 账户类型 Account type (RegTMargin: 保证金 Margin, Cash: 现金 Cash) |
 | netLiquidation | 1233662.93 | 净清算值 Net liquidation value |
 | equityWithLoan | 1233078.69 | 含借贷值股权 Equity with loan. 证券Segment: 现金价值+股票价值, 期货Segment: 现金价值-维持保证金 |
@@ -132,7 +132,7 @@ Get global account assets. For standard/paper accounts, use PrimeAssetRequest in
 
 | 名称 Field | 示例 Example | 说明 Description |
 |-----------|-------------|-----------------|
-| account | DU575569 | 交易账户 Trading account |
+| account | DU000001 | 交易账户 Trading account |
 | category | S | 分类 Category: C (Commodities 期货) / S (Securities 证券) |
 | title | US Securities | 标题 Title |
 | netLiquidation | 1233662.93 | 净清算值 Net liquidation |
@@ -155,7 +155,7 @@ Get global account assets. For standard/paper accounts, use PrimeAssetRequest in
 
 | 名称 Field | 示例 Example | 说明 Description |
 |-----------|-------------|-----------------|
-| account | DU575569 | 交易账户 Trading account |
+| account | DU000001 | 交易账户 Trading account |
 | currency | USD | 货币币种 Currency |
 | netLiquidation | 1233662.93 | 总资产 (净清算价值) Net liquidation |
 | cashBalance | 469140.39 | 现金 Cash balance |
@@ -178,7 +178,7 @@ TigerHttpClient client = TigerHttpClient.getInstance().clientConfig(
 TigerHttpRequest request = new TigerHttpRequest(MethodName.ASSETS);
 
 String bizContent = AccountParamBuilder.instance()
-        .account("DU575569")
+        .account("DU000001")
         .buildJson();
 
 request.setBizContent(bizContent);
@@ -202,7 +202,7 @@ String category = segment.getString("category"); // "S" 股票， "C" 期货
   "message": "success",
   "data": {
     "items": [{
-      "account": "DU575569",
+      "account": "DU000001",
       "accruedCash": -763.2,
       "accruedDividend": 0.0,
       "availableFunds": 941031.78,
@@ -222,7 +222,7 @@ String category = segment.getString("category"); // "S" 股票， "C" 期货
       "realizedPnl": -31.68,
       "unrealizedPnl": 1814.01,
       "segments": [{
-        "account": "DU575569",
+        "account": "DU000001",
         "availableFunds": 65.55,
         "cashValue": 65.55,
         "category": "S",
@@ -235,7 +235,7 @@ String category = segment.getString("category"); // "S" 股票， "C" 期货
         "title": "US Securities"
       }],
       "marketValues": [{
-        "account": "DU575569",
+        "account": "DU000001",
         "currency": "HKD",
         "exchangeRate": 0.1273896,
         "netLiquidation": 11223.29,

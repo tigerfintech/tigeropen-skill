@@ -72,7 +72,7 @@ mvn clean install
 4. 导出配置文件 `tiger_openapi_config.properties` / Export config file
 
 > 私钥不会保存在服务端，刷新页面后消失，请务必保存。Private key is not stored on server; save it before refreshing the page.
-> Java SDK 使用 PKCS#8 格式，Python SDK 使用 PKCS#1 格式。Java uses PKCS#8, Python uses PKCS#1.
+> Java SDK 使用 PKCS#8 格式（`private_key_pk8`）。Java SDK uses PKCS#8 format.
 
 ## 账户类型 / Account Types
 
@@ -90,7 +90,7 @@ mvn clean install
 Export `tiger_openapi_config.properties` from developer website and place it in the `configFilePath` directory.
 
 ```properties
-tiger_id=20150001
+tiger_id=YOUR_TIGER_ID
 account=12345678
 license=TBHK
 private_key_pk1=MIICXgIBAAKBgQC.....your_pkcs1_private_key
@@ -99,6 +99,9 @@ env=PROD
 # 机构用户需额外配置 / Institutional users also need:
 # secret_key=your_secret_key
 ```
+
+> Java SDK 同时支持 **PKCS#8**（`private_key_pk8`）和 **PKCS#1**（`private_key_pk1`）格式，优先读取 `private_key_pk8`。
+> Java SDK supports both PKCS#8 (`private_key_pk8`) and PKCS#1 (`private_key_pk1`). `private_key_pk8` takes priority.
 
 > 港股牌照(TBHK)还需将 `tiger_openapi_token.properties` 放入同一目录。Token 有效期 30 天。
 > HK license (TBHK) also requires `tiger_openapi_token.properties` in the same directory. Token valid for 30 days.

@@ -671,8 +671,8 @@ System.out.println(JSONObject.toJSONString(response));
 ```java
 TigerHttpRequest request = new TigerHttpRequest(MethodName.MODIFY_ORDER);
 String bizContent = TradeParamBuilder.instance()
-    .account("DU575569")
-    .id(147070683398615040L)
+    .account("DU000001")
+    .id(100000000000000001L)
     .totalQuantity(200)
     .limitPrice(60.0)
     .buildJson();
@@ -702,8 +702,8 @@ Long id = data.getLong("id");
 ```java
 TigerHttpRequest request = new TigerHttpRequest(MethodName.CANCEL_ORDER);
 String bizContent = TradeParamBuilder.instance()
-    .account("DU575569")
-    .id(147070683398615040L)
+    .account("DU000001")
+    .id(100000000000000001L)
     .buildJson();
 request.setBizContent(bizContent);
 TigerHttpResponse response = client.execute(request);
@@ -848,7 +848,7 @@ BatchOrderResponse response = client.execute(request);
 ```java
 QueryOrderRequest request = new QueryOrderRequest(MethodName.ACTIVE_ORDERS);
 String bizContent = AccountParamBuilder.instance()
-        .account("DU575569")
+        .account("DU000001")
         .secType(SecType.STK)
         .buildJson();
 request.setBizContent(bizContent);
@@ -860,7 +860,7 @@ BatchOrderResponse response = client.execute(request);
 ```java
 QueryOrderRequest request = new QueryOrderRequest(MethodName.INACTIVE_ORDERS);
 String bizContent = AccountParamBuilder.instance()
-        .account("DU575569")
+        .account("DU000001")
         .secType(SecType.STK)
         .buildJson();
 request.setBizContent(bizContent);
@@ -1069,7 +1069,7 @@ while (true) {
 ```java
 TigerHttpRequest request = new TigerHttpRequest(MethodName.ASSETS);
 String bizContent = AccountParamBuilder.instance()
-        .account("DU575569")
+        .account("DU000001")
         .buildJson();
 request.setBizContent(bizContent);
 TigerHttpResponse response = client.execute(request);
