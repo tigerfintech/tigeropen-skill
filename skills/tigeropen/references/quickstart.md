@@ -28,6 +28,21 @@ The Tiger Open Platform Python SDK (tigeropen) provides trading and market data 
 
 ## 安装 / Installation
 
+### 一键安装脚本 / One-line Installer
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.sh | sh
+
+# Windows (PowerShell) — 在 PowerShell 中运行 / Run in PowerShell
+irm https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.ps1 | iex
+```
+
+脚本自动检测并选择最佳安装方式（uv > pipx > pip），并自动配置 PATH。
+The script auto-detects and uses the best method (uv > pipx > pip) and configures PATH.
+
+### 手动安装 / Manual Install
+
 ```bash
 pip install tigeropen
 

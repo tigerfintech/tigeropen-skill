@@ -12,7 +12,10 @@ The TigerOpen CLI is a click-based command-line tool, available automatically af
 Query market data, manage orders, and view account info without writing Python code.
 
 - 入口命令 Entry point: `tigeropen`
-- 安装 Install: `pip install tigeropen`
+- 安装 Install:
+  - macOS / Linux: `curl -fsSL https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.sh | sh`
+  - Windows (PowerShell): `irm https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.ps1 | iex`
+  - pip: `pip install tigeropen`
 - Python: 3.8 - 3.14
 
 ---
