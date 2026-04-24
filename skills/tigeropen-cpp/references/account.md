@@ -46,7 +46,7 @@ ucout << result << endl;
 
 ```cpp
 value obj = value::object(true);
-obj[U("account")] = value::string(U("DU575569"));
+obj[U("account")] = value::string(U("DU000001"));
 // 可选参数 / Optional params:
 // obj[U("segment")] = value::boolean(true);      // 按证券/期货分类
 // obj[U("market_value")] = value::boolean(true); // 按市场分市值（仅环球）

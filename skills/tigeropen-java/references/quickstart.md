@@ -90,7 +90,7 @@ mvn clean install
 Export `tiger_openapi_config.properties` from developer website and place it in the `configFilePath` directory.
 
 ```properties
-tiger_id=20150001
+tiger_id=YOUR_TIGER_ID
 account=12345678
 license=TBHK
 private_key_pk1=MIICXgIBAAKBgQC.....your_pkcs1_private_key

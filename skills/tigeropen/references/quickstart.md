@@ -70,7 +70,7 @@ Export config file from developer website and place it in a suitable path.
 配置文件格式 / Config file format:
 
 ```properties
-tiger_id=20150001
+tiger_id=YOUR_TIGER_ID
 account=12345678
 license=TBHK
 private_key_pk1=MIICXgIBAAKBgQC.....your_pkcs1_private_key

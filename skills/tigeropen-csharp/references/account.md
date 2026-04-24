@@ -57,7 +57,7 @@ var request = new TigerRequest<AssetsResponse>()
     ApiMethodName = TradeApiService.ASSETS,
     ModelValue = new AssetModel()
     {
-        Account = "DU575569",
+        Account = "DU000001",
         Segment = true,       // 按证券/期货分类
         MarketValue = true    // 按市场分市值（仅环球账户）
     }

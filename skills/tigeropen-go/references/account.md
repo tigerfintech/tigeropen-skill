@@ -47,7 +47,7 @@ json.Unmarshal(result, &accounts)
 
 ```go
 result, err := tc.Assets(map[string]interface{}{
-    "account":      "DU575569",
+    "account":      "DU000001",
     "segment":      true,        // 按证券/期货分类
     "market_value": true,        // 按市场分市值（仅环球账户）
 })
