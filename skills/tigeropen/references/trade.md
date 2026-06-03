@@ -18,12 +18,12 @@
 
 ### 实盘下单工作流 / Live Order Workflow
 
-当用户要求实盘交易时，**必须执行以下流程** / When user requests live trading, follow these steps:
+当用户要求实盘交易时，**必须严格执行以下流程，缺少任何步骤均不得下单** / When user requests live trading, every step below is **mandatory** — skip any step and do NOT place the order:
 
 1. **确认账户 Verify account**: 调用 `get_managed_accounts()` 获取账户列表，筛选 `account_type != 'PAPER'` 的实盘账户 / Call `get_managed_accounts()`, filter for non-PAPER accounts
-2. **二次确认 Confirm with user**: 下单前必须与用户确认：标的代码、买卖方向、数量、价格、账户类型 / Confirm symbol, action, quantity, price, account type
-3. **预览订单 Preview**: 建议先调用 `preview_order()` 查看预估佣金和保证金 / Call `preview_order()` for commission and margin estimates
-4. **执行下单 Execute**: 确认后执行 `place_order()` / Place the order after confirmation
+2. **预览订单 Preview**: 调用 `preview_order()` 查看预估佣金和保证金，并将结果展示给用户 / Call `preview_order()`, show the commission and margin estimate to the user
+3. **等待用户明确确认 Wait for explicit user confirmation**: 将订单详情（标的、方向、数量、价格、账户、预估佣金）以表格形式展示，**然后停止，等待用户回复确认**。未收到用户明确的"确认"/"confirm"/"是"/"yes"之前，**禁止调用 `place_order()`** / Display order details in a table (symbol, action, quantity, price, account, est. commission), then **stop and wait**. Do NOT call `place_order()` until the user explicitly replies to confirm.
+4. **执行下单 Execute**: 用户确认后才执行 `place_order()` / Only after user confirms, call `place_order()`
 5. **检查状态 Check status**: `place_order()` 返回成功仅表示提交，需通过 `get_orders()` 确认成交 / Submission success ≠ execution; poll `get_orders()` to confirm fill
 
 ---
@@ -83,11 +83,15 @@ opt = option_contract_by_symbol(symbol='AAPL', expiry='20250829',
 # 期货 / Future
 fut = future_contract(symbol='CL2509', currency='USD')
 
-# 窝轮 / Warrant
-war = war_contract_by_symbol(symbol='12345', currency='HKD')
+# 窝轮 / Warrant (必须提供 expiry, strike, put_call, local_symbol)
+war = war_contract_by_symbol(symbol='12345', expiry='20251231',
+                              strike=10.0, put_call='CALL',
+                              local_symbol='12345', currency='HKD')
 
-# 牛熊证 / CBBC
-iopt = iopt_contract_by_symbol(symbol='56789', currency='HKD')
+# 牛熊证 / CBBC (必须提供 expiry, strike, put_call, local_symbol)
+iopt = iopt_contract_by_symbol(symbol='56789', expiry='20251231',
+                                strike=20.0, put_call='CALL',
+                                local_symbol='56789', currency='HKD')
 
 # 基金 / Fund
 fund = fund_contract(symbol='ARKK', currency='USD')
@@ -162,6 +166,39 @@ trade_client.place_order(order)
 
 > 也有 `limit_order_by_amount` 用于按金额的限价单。
 > There's also `limit_order_by_amount` for limit orders by amount.
+
+### ⚠️ 碎股卖出 / Selling Fractional Shares
+
+**碎股（qty < 1，如 0.82379 股）不能直接传给 `limit_order(quantity=...)` 或 `market_order(quantity=...)`**，SDK 的 `quantity` 参数是整数，小数部分会被截断（如 `0.82379 → 0`），导致下单数量错误或为 0。
+
+**正确做法 / Correct approach**:
+
+```python
+# 从持仓获取碎股数量（salable_qty 是带小数的原始值，如 0.82379）
+positions = trade_client.get_positions(symbol='DVN')
+pos = positions[0]
+salable = pos.salable_qty  # e.g. 0.82379
+
+# ❌ 错误：直接传 float → quantity 被截断为 0
+# order = limit_order(account=..., contract=..., action='SELL', quantity=salable, ...)
+
+# ✅ 方法一：市价单卖出碎股（推荐，碎股只支持市价单）
+order = market_order(account=client_config.account, contract=contract,
+                     action='SELL', quantity=1,  # 占位，实际由 quantity_scale 控制
+                     )
+order.quantity = salable          # 设置 float 数量
+order.quantity_scale = len(str(salable).split('.')[-1])  # 自动计算小数位数，如 5
+trade_client.place_order(order)
+
+# ✅ 方法二：按持仓市值卖出（适合不知道精确股数时）
+market_value = pos.market_value  # 当前市值
+order = market_order_by_amount(account=client_config.account, contract=contract,
+                               action='SELL', amount=market_value)
+trade_client.place_order(order)
+```
+
+> **关键规则**: 碎股（fractional shares）**只支持市价单**，不支持限价单。`limit_order_by_amount` 对碎股仓位会被 API 拒绝（API 报错）。
+> Fractional share positions only support **market orders**, not limit orders.
 
 ### 止损单 STP / Stop Order
 
@@ -659,7 +696,7 @@ positions = trade_client.get_positions()
 # 按类型 / By security type
 positions = trade_client.get_positions(sec_type=SecurityType.STK)
 for p in positions:
-    print(f"{p.contract.symbol}: qty={p.qty}, cost={p.average_cost}, "
+    print(f"{p.contract.symbol}: qty={p.quantity}, cost={p.average_cost}, "
           f"price={p.market_price}, value={p.market_value}, "
           f"pnl={p.unrealized_pnl}, salable={p.salable_qty}")
 
@@ -712,9 +749,11 @@ tigeropen trade position list --symbol AAPL                  # 指定标的
 ## 预估可交易数量 / Estimate Tradable Quantity
 
 ```python
-result = trade_client.get_estimate_tradable_quantity(
-    symbol='AAPL', sec_type='STK', order_type='LMT',
-    action='BUY', limit_price=150.0)
+# ⚠️ 必须先构建 order 对象再传入，不支持关键字参数展开
+# Must build an order object first — does NOT accept keyword args
+order = limit_order(account=client_config.account, contract=contract,
+                    action='BUY', quantity=1, limit_price=150.0)
+result = trade_client.get_estimate_tradable_quantity(order)
 # 返回: tradable_quantity(可交易), financing_quantity(融资可交易), position_quantity(持仓数量)
 ```
 
@@ -722,8 +761,9 @@ result = trade_client.get_estimate_tradable_quantity(
 
 ```python
 # 查询可划转金额 / Query transferable amount
+# ⚠️ 没有 to_segment 参数，只有 from_segment + currency
 available = trade_client.get_segment_fund_available(
-    from_segment='SEC', to_segment='FUT', currency='USD')
+    from_segment='SEC', currency='USD')
 
 # 划转 / Transfer
 trade_client.transfer_segment_fund(
@@ -739,8 +779,17 @@ history = trade_client.get_segment_fund_history()
 ## 出入金记录 / Deposit/Withdrawal Records
 
 ```python
-records = trade_client.get_funding_history(
-    start_time='2025-01-01', end_time='2025-06-30', currency='USD')
+# ⚠️ get_funding_history 只接受 seg_type 参数，无 start_time/end_time/currency
+# Use get_fund_details for filtered history with date range and currency
+records = trade_client.get_funding_history(seg_type='SEC')  # SEC / FUT / ALL
+
+# 带时间范围和币种过滤用 get_fund_details
+details = trade_client.get_fund_details(
+    seg_types=['SEC'],          # 必填 / required
+    currency='USD',
+    start_date='2025-01-01',
+    end_date='2025-06-30',
+    limit=100)
 ```
 
 ## 换汇下单 / Forex Order

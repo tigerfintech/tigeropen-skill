@@ -26,8 +26,8 @@ metadata:
 
 > 老虎量化开放平台 Python SDK 完整技能集 / Complete AI skill set for Tiger Brokers OpenAPI
 
-> **安全警告 / Safety Warning**: 交易涉及真实资金。生成交易代码时默认使用**模拟账户**（Paper Trading），除非用户明确要求实盘。实盘下单前必须与用户确认订单详情。
-> Trading involves real money. Default to **Paper Trading** account when generating trading code unless the user explicitly requests live trading. Always confirm order details with the user before live orders.
+> **安全警告 / Safety Warning**: 交易涉及真实资金。生成交易代码时默认使用**模拟账户**（Paper Trading），除非用户明确要求实盘。实盘下单前**必须**：1) 调用 `preview_order()` 展示预估佣金；2) 以表格展示订单详情；3) **停止并等待用户明确确认后**才能调用 `place_order()`。
+> Trading involves real money. Default to **Paper Trading** unless the user explicitly requests live trading. Before any live `place_order()` call: 1) call `preview_order()` and show estimated fees, 2) display order details in a table, 3) **stop and wait for explicit user confirmation** — never auto-submit.
 
 - Docs: https://docs.itigerup.com/docs/prepare
 - GitHub: https://github.com/tigerfintech/openapi-python-sdk

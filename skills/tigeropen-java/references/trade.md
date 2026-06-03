@@ -18,12 +18,12 @@
 
 ### 实盘下单工作流 / Live Order Workflow
 
-当用户要求实盘交易时，**必须执行以下流程** / When user requests live trading, follow these steps:
+当用户要求实盘交易时，**每步均为必须，缺少任何步骤不得下单** / Every step is mandatory — skip any and do NOT place the order:
 
 1. **确认账户 Verify account**: 获取账户列表，筛选 `accountType != "PAPER"` 的实盘账户 / Get account list, filter for non-PAPER accounts
-2. **二次确认 Confirm with user**: 下单前必须与用户确认：标的代码、买卖方向、数量、价格、账户类型 / Confirm symbol, action, quantity, price, account type
-3. **预览订单 Preview**: 建议先调用预览接口查看预估佣金和保证金 / Preview for commission and margin estimates
-4. **执行下单 Execute**: 确认后执行下单 / Place the order after confirmation
+2. **预览订单 Preview**: 调用 `TradeOrderPreviewRequest` 查看预估佣金和保证金，将结果展示给用户 / Call preview, show estimated commission and margin to user
+3. **等待用户明确确认 Wait for explicit confirmation**: 将订单详情（标的、方向、数量、价格、账户、预估佣金）以表格展示，**停止并等待用户明确回复**；未收到确认前**禁止执行下单** / Display order details in a table, **stop and wait**; do NOT submit until user explicitly confirms
+4. **执行下单 Execute**: 用户确认后执行下单 / Place the order only after confirmation
 5. **检查状态 Check status**: 下单返回成功仅表示提交，需查询订单确认成交 / Submission success ≠ execution; query order to confirm fill
 
 ---

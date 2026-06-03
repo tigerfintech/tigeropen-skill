@@ -210,7 +210,9 @@ for s in status:
 briefs = quote_client.get_stock_briefs(['AAPL', 'TSLA'])
 # get_stock_briefs returns a pandas DataFrame
 for _, b in briefs.iterrows():
-    print(f"{b['symbol']}: price={b['latest_price']}, change={b['change_percentage']}%")
+    # DataFrame 无 change_percentage 列，需自行计算 / No change_percentage column; compute manually
+    pct = (b['latest_price'] - b['pre_close']) / b['pre_close'] * 100 if b['pre_close'] else 0
+    print(f"{b['symbol']}: price={b['latest_price']}, change={pct:.2f}%")
 
 # 5. 获取K线 / Get K-line data
 bars = quote_client.get_bars(['AAPL'], period=BarPeriod.DAY, limit=30)
