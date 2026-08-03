@@ -144,7 +144,7 @@ static {
 ClientConfig clientConfig = ClientConfig.DEFAULT_CONFIG;
 clientConfig.tigerId = "your tiger id";
 clientConfig.defaultAccount = "your account";
-clientConfig.privateKey = FileUtil.readPrivateKey("/path/to/rsa_private_key_pkcs8.pem");
+clientConfig.privateKey = ConfigFileUtil.readPrivateKey("/path/to/rsa_private_key_pkcs8.pem");
 // clientConfig.token = "xx"; // TBHK牌照需要配置
 // clientConfig.secretKey = "xxxxxx"; // 机构用户
 
@@ -257,89 +257,22 @@ Subscription uses async push: bind custom callbacks to events, auto-called on se
 
 实现 `ApiComposeCallback` 接口：
 
-```java
-import com.tigerbrokers.stock.openapi.client.socket.ApiComposeCallback;
-import com.tigerbrokers.stock.openapi.client.socket.data.pb.*;
-import com.tigerbrokers.stock.openapi.client.socket.data.TradeTick;
-import com.tigerbrokers.stock.openapi.client.struct.SubscribedSymbol;
-import com.tigerbrokers.stock.openapi.client.util.ApiLogger;
-import com.tigerbrokers.stock.openapi.client.util.ProtoMessageUtil;
+`ApiComposeCallback` 是宽接口，共 **29 个方法**，实现类必须全部覆盖（可留空）。
+完整可编译的实现见 [push.md](push.md)。
+`ApiComposeCallback` declares 29 methods — all must be implemented. See push.md
+for a complete, compilable implementation.
 
-public class DefaultApiComposeCallback implements ApiComposeCallback {
+接口方法分组 / Method groups:
 
-  @Override
-  public void orderStatusChange(OrderStatusData data) {
-    ApiLogger.info("orderStatusChange:" + ProtoMessageUtil.toJson(data));
-  }
+| 分组 | 方法 |
+|------|------|
+| 连接生命周期 | `connectionAck()`、`connectionAck(int,int)`、`connectionClosed()`、`connectionKickout(int,String)`、`hearBeat(String)`、`serverHeartBeatTimeOut(String)` |
+| 错误 | `error(String)`、`error(int,int,String)` |
+| 订阅结果 | `subscribeEnd(int,String,String)`、`cancelSubscribeEnd(int,String,String)`、`getSubscribedSymbolEnd(SubscribedSymbol)` |
+| 账户推送 | `orderStatusChange`、`orderTransactionChange`、`positionChange`、`assetChange` |
+| 行情推送 | `quoteChange`、`quoteAskBidChange`、`optionChange`、`optionAskBidChange`、`futureChange`、`futureAskBidChange`、`ccChange`、`ccAskBidChange`、`depthQuoteChange`、`klineChange`、`tradeTickChange`、`fullTickChange`、`stockTopPush`、`optionTopPush` |
 
-  @Override
-  public void positionChange(PositionData data) {
-    ApiLogger.info("positionChange:" + ProtoMessageUtil.toJson(data));
-  }
 
-  @Override
-  public void assetChange(AssetData data) {
-    ApiLogger.info("assetChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void quoteChange(QuoteBasicData data) {
-    ApiLogger.info("quoteChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void quoteAskBidChange(QuoteBBOData data) {
-    ApiLogger.info("quoteAskBidChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void depthQuoteChange(QuoteDepthData data) {
-    ApiLogger.info("depthQuoteChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void klineChange(KlineData data) {
-    ApiLogger.info("klineChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void optionChange(QuoteBasicData data) {
-    ApiLogger.info("optionChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void futureChange(QuoteBasicData data) {
-    ApiLogger.info("futureChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void tradeTickChange(TradeTick data) {
-    ApiLogger.info("tradeTickChange:" + data);
-  }
-
-  @Override
-  public void connectionAck() {
-    ApiLogger.info("connect success.");
-  }
-
-  @Override
-  public void connectionClosed() {
-    ApiLogger.info("connection closed.");
-  }
-
-  @Override
-  public void error(String errorMsg) {
-    ApiLogger.info("receive error:" + errorMsg);
-  }
-
-  @Override
-  public void error(int id, int errorCode, String errorMsg) {
-    ApiLogger.info("error id:" + id + ",code:" + errorCode + ",msg:" + errorMsg);
-  }
-
-  // ... 其他回调方法参见 ApiComposeCallback 接口
-}
-```
 
 **2. 进行订阅 / Subscribe**
 
@@ -450,10 +383,14 @@ public class SubscribeDemo {
 ContractItem stock = ContractItem.buildStockContract("AAPL", "USD");
 
 // 期权合约 / Option contract
-ContractItem option = ContractItem.buildOptionContract("AAPL", "CALL", "2024-01-19", 190.0);
+// 参数顺序：(symbol, expiry, strike, right)，expiry 用 YYYYMMDD
+// Argument order is (symbol, expiry, strike, right)
+ContractItem option = ContractItem.buildOptionContract("AAPL", "20260821", 190.0D, "CALL");
 
 // 期货合约 / Futures contract
-ContractItem future = ContractItem.buildFutureContract("ES", "USD", "20240315");
+// buildFutureContract 只有 (symbol, currency) 和 5 参数完整形式两个重载
+// Only (symbol, currency) and the 5-arg overload exist
+ContractItem future = ContractItem.buildFutureContract("ES", "USD", "CME", "20240315", 50.0D);
 ```
 
 ### TradeOrderRequest 下单请求 / Order Request

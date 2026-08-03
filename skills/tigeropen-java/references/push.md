@@ -104,7 +104,10 @@ public class DefaultApiComposeCallback implements ApiComposeCallback {
   /* 逐笔成交行情回调 Trade tick change (snapshot) */
   @Override
   public void tradeTickChange(TradeTick data) {
-    ApiLogger.info("tradeTickChange:" + ProtoMessageUtil.toJson(data));
+    // TradeTick 是普通 SDK 模型（socket.data 包），不是 protobuf Message，
+    // 不能传给 ProtoMessageUtil.toJson()
+    // TradeTick is a plain SDK model, not a protobuf Message
+    ApiLogger.info("tradeTickChange:" + JSONObject.toJSONString(data));
   }
 
   /* 全量逐笔成交行情回调 Full tick change */
@@ -173,10 +176,17 @@ public class DefaultApiComposeCallback implements ApiComposeCallback {
     ApiLogger.info("getSubscribedSymbolEnd:" + subscribedSymbol);
   }
 
-  /* 连接成功回调 Connection ack */
+  /* 连接成功回调 Connection ack（接口有两个重载，都必须实现）*/
   @Override
   public void connectionAck() {
     System.out.println("connect ack.");
+  }
+
+  /* 带心跳间隔的连接成功回调 / Connection ack with heartbeat intervals */
+  @Override
+  public void connectionAck(int serverSendInterval, int serverReceiveInterval) {
+    System.out.println("connect ack. send=" + serverSendInterval
+        + ", receive=" + serverReceiveInterval);
   }
 
   /* 连接已关闭回调 Connection closed */
@@ -236,6 +246,7 @@ Callbacks when WebSocket connection is established or disconnected.
 
 ```java
 void connectionAck()                                    // 连接成功 Connected
+void connectionAck(int sendInterval, int receiveInterval) // 连接成功（含心跳间隔）Connected with heartbeat intervals
 void connectionClosed()                                 // 连接已关闭 Connection closed
 void connectionKickout(int errorCode, String errorMsg)  // 被另一个连接踢掉 Kicked out by another connection
 void hearBeat(String s)                                 // 心跳回调 Heartbeat
@@ -1563,6 +1574,7 @@ public class WebSocketDemo {
 | `cancelSubscribeEnd(int, String, String)` | 取消订阅完成 Cancel subscribe end |
 | `getSubscribedSymbolEnd(SubscribedSymbol)` | 查询已订阅 Query subscribed |
 | `connectionAck()` | 连接成功 Connected |
+| `connectionAck(int, int)` | 连接成功（含心跳间隔）Connected with heartbeat intervals |
 | `connectionClosed()` | 连接关闭 Connection closed |
 | `connectionKickout(int, String)` | 被踢出 Kicked out |
 | `hearBeat(String)` | 心跳 Heartbeat |
