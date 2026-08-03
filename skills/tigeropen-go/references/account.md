@@ -8,8 +8,9 @@
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-go-sdk/config"
     "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/model"
     "github.com/tigerfintech/openapi-go-sdk/trade"
 )
 
@@ -20,24 +21,30 @@ httpClient := client.NewHttpClient(cfg)
 tc := trade.NewTradeClient(httpClient, cfg.Account)
 ```
 
+> **入参约定 / Request convention**: Go 是静态类型语言，所有方法接收 `model.XxxRequest` **结构体**，
+> 不能传 `map[string]interface{}`；返回**强类型结构体**，不需要 `json.Unmarshal`。
+> All methods take a typed `model.XxxRequest` struct (not a map) and return typed structs.
+
 ---
 
 ## 账户列表 / Account List
 
 ```go
-result, err := httpClient.ExecuteRaw("accounts", map[string]interface{}{})
-// 不传 account 返回所有账号（综合、环球、模拟）
-// Omit account to return all accounts
+accounts, err := tc.ManagedAccounts(model.ManagedAccountsRequest{})
+// 不传 Account 返回当前用户可见的所有账号（综合、环球、模拟）
+// Omit Account to return every account visible to the user
 
-// 返回字段 / Response fields:
-// account     - 账户号（综合5~10位数字，模拟17位，环球以U开头）
-// capability  - CASH（现金）/ RegTMargin（保证金）/ PMGRN（组合保证金）
-// status      - Funded / Open / Pending / Rejected / Closed
-// accountType - STANDARD / GLOBAL / PAPER
-
-var accounts []map[string]interface{}
-json.Unmarshal(result, &accounts)
+for _, a := range accounts {
+    fmt.Printf("%s status=%s type=%s capability=%s\n",
+        a.Account, a.Status, a.AccountType, a.Capability)
+}
 ```
+
+字段说明 / Fields:
+- `Account` — 账户号（综合 5~10 位数字，模拟 17 位，环球以 U 开头）
+- `Capability` — `CASH`（现金）/ `RegTMargin`（保证金）/ `PMGRN`（组合保证金）
+- `Status` — `Funded` / `Open` / `Pending` / `Rejected` / `Closed`
+- `AccountType` — `STANDARD` / `GLOBAL` / `PAPER`
 
 ---
 
@@ -46,144 +53,126 @@ json.Unmarshal(result, &accounts)
 ### 环球账户 / Global Account
 
 ```go
-result, err := tc.Assets(map[string]interface{}{
-    "account":      "DU000001",
-    "segment":      true,        // 按证券/期货分类
-    "market_value": true,        // 按市场分市值（仅环球账户）
+globalAssets, err := tc.Assets(model.AssetsRequest{
+    Account:     "DU000001",
+    Segment:     true,  // 按证券/期货分类
+    MarketValue: true,  // 按市场分市值（仅环球账户）
 })
 
-// 主要返回字段 / Key response fields:
-// netLiquidation  - 净清算值
-// availableFunds  - 可用资金
-// buyingPower     - 购买力
-// cashValue       - 现金
-// initMarginReq   - 初始保证金要求
-// maintMarginReq  - 维持保证金要求
-// unrealizedPnl   - 浮动盈亏
-// realizedPnl     - 已实现盈亏
-// segments        - 按交易品种（S=证券, C=期货）分类
-// marketValues    - 按市场（USD/HKD）分类
-
-var assetData map[string]interface{}
-json.Unmarshal(result, &assetData)
+for _, a := range globalAssets {
+    fmt.Printf("%s %s netLiq=%.2f cash=%.2f buyingPower=%.2f unrealPnl=%.2f\n",
+        a.Account, a.Currency, a.NetLiquidation, a.CashValue,
+        a.BuyingPower, a.UnrealizedPnL)
+    for _, seg := range a.Segments {
+        fmt.Printf("  segment %s netLiq=%.2f\n", seg.Category, seg.NetLiquidation)
+    }
+}
 ```
+
+返回 `[]model.Asset`。主要字段：`NetLiquidation`（净清算值）、`CashValue`（现金）、
+`BuyingPower`（购买力）、`RealizedPnL`、`UnrealizedPnL`、`Segments`（按品种分类）。
 
 ### 综合/模拟账号 / Standard/Paper Account
 
 ```go
-result, err := tc.PrimeAssets(map[string]interface{}{
-    "account":       "123456",
-    "base_currency": "USD",
-    "consolidated":  true,   // SEC+FUND聚合显示
+consolidated := true
+prime, err := tc.PrimeAssets(model.AssetsRequest{
+    Account:      "123456",
+    BaseCurrency: "USD",
+    Consolidated: &consolidated,  // 指针类型：SEC+FUND 聚合显示
 })
 
-// segments 数组主要字段 / Segment key fields:
-// category              - S（证券）/ C（期货）/ F（基金）/ D（数字货币）
-// capability            - RegTMargin / Cash
-// buyingPower           - 最大购买力（保证金账户日内4倍，隔夜2倍）
-// cashAvailableForTrade - 可用资金
-// cashBalance           - 现金余额
-// netLiquidation        - 净清算值
-// initMargin            - 初始保证金
-// maintainMargin        - 维持保证金（低于此值会强平）
-// unrealizedPL          - 浮动盈亏
-// currencyAssets        - 按币种（USD/HKD/SGD/CNH）细分
-
-var data map[string]interface{}
-json.Unmarshal(result, &data)
+fmt.Println("account:", prime.AccountID, "updated:", prime.UpdateTimestamp)
+for _, seg := range prime.Segments {
+    fmt.Printf("%s %s cashBalance=%.2f netLiq=%.2f initMargin=%.2f maintainMargin=%.2f\n",
+        seg.Category, seg.Currency, seg.CashBalance, seg.NetLiquidation,
+        seg.InitMargin, seg.MaintainMargin)
+}
 ```
+
+返回 `*model.PrimeAsset`（`AccountID`、`UpdateTimestamp`、`Segments`）。
+`Segments []model.PrimeAssetSegment` 主要字段：
+- `Category` — `S`（证券）/ `C`（期货）/ `F`（基金）/ `D`（数字货币）
+- `Capability` — `RegTMargin` / `Cash`
+- `CashBalance`、`CashAvailableForTrade`、`GrossPositionValue`、`EquityWithLoan`
+- `NetLiquidation`、`InitMargin`、`MaintainMargin`、`OvernightMargin`
+
+> `Consolidated` 是 `*bool`，需先声明变量再取地址 / `Consolidated` is a `*bool`.
 
 ---
 
 ## 账户持仓 / Account Positions
 
 ```go
-result, err := tc.Positions(map[string]interface{}{
-    "account":  "123456",
-    "sec_type": "STK",   // STK/OPT/FUT，默认STK
-    "currency": "ALL",   // ALL/USD/HKD/CNH
-    "market":   "ALL",   // ALL/US/HK/CN
+positions, err := tc.Positions(model.PositionsRequest{
+    Account:  "123456",
+    SecType:  "STK",  // STK/OPT/FUT，默认 STK
+    Currency: "ALL",  // ALL/USD/HKD/CNH
+    Market:   "ALL",  // ALL/US/HK/CN
 })
 
-// 主要持仓字段 / Key position fields:
-// symbol        - 股票代码
-// positionQty   - 持仓数量
-// averageCost   - 平均成本（FIFO）
-// marketValue   - 市值
-// unrealizedPnl - 浮动盈亏
-// secType       - 证券类型
-// market        - 市场
-// currency      - 币种
-
-var positions []map[string]interface{}
-json.Unmarshal(result, &positions)
+for _, p := range positions {
+    fmt.Printf("%s qty=%.2f salable=%.2f cost=%.4f mktValue=%.2f unrealPnl=%.2f\n",
+        p.Symbol, p.PositionQty, p.SalableQty, p.AverageCost,
+        p.MarketValue, p.UnrealizedPnl)
+}
 ```
+
+返回 `[]model.Position`。主要字段：`Symbol`、`SecType`、`Market`、`Currency`、
+`PositionQty`（持仓数量，支持碎股）、`SalableQty`（可卖数量）、`AverageCost`（平均成本）、
+`MarketValue`、`RealizedPnl`、`UnrealizedPnl`、`UnrealizedPnlPercent`。
 
 ### 期权持仓 / Option Positions
 
 ```go
-result, err := tc.Positions(map[string]interface{}{
-    "account":  "123456",
-    "sec_type": "OPT",
+optPositions, err := tc.Positions(model.PositionsRequest{
+    Account: "123456",
+    SecType: "OPT",
 })
-// 期权持仓额外字段 / Option-specific fields:
-// strike - 行权价, expiry - 到期日, right - CALL/PUT
 ```
+
+期权持仓通过 `Identifier`（期权标准代码）和 `Multiplier` 表达合约要素，响应结构体上
+**没有** 独立的 `Strike`/`Expiry`/`Right` 字段；这三项可作为 `PositionsRequest` 的查询过滤条件。
+Option positions expose the contract via `Identifier` + `Multiplier`; `Strike`/`Expiry`/`Right`
+exist only as request-side filters.
 
 ---
 
 ## 历史资产分析 / Asset Analytics (PnL History)
 
 ```go
-result, err := tc.PrimeAnalyticsAsset(map[string]interface{}{
-    "account":    "123456",
-    "start_date": "2024-01-01",
-    "end_date":   "2024-01-31",
-    "seg_type":   "SEC",   // SEC / FUT
-    "currency":   "USD",
+analytics, err := tc.AnalyticsAsset(model.AnalyticsAssetRequest{
+    Account:   "123456",
+    StartDate: "2026-01-01",  // yyyy-MM-dd
+    EndDate:   "2026-01-31",
+    SegType:   "SEC",         // SEC / FUT
+    Currency:  "USD",
 })
-
-// summary 字段 / Summary fields:
-// pnl                - 盈亏金额
-// pnlPercentage      - 收益率
-// annualizedReturn   - 年化收益率
-
-// history 数组每项字段 / History item fields:
-// date               - 日期时间戳（毫秒）
-// asset              - 总资产
-// pnl                - 当日盈亏
-// cashBalance        - 现金余额
-// grossPositionValue - 持仓市值
-// deposit            - 入金
-// withdrawal         - 出金
-
-var analytics map[string]interface{}
-json.Unmarshal(result, &analytics)
 ```
+
+> 方法名是 `AnalyticsAsset`，**不是** `PrimeAnalyticsAsset` / The method is `AnalyticsAsset`.
+
+返回内容包含汇总（`pnl` 盈亏、`pnlPercentage` 收益率、`annualizedReturn` 年化收益率）
+与按日历史（`date` 毫秒时间戳、`asset` 总资产、`pnl` 当日盈亏、`cashBalance`、
+`grossPositionValue`、`deposit` 入金、`withdrawal` 出金）。
 
 ---
 
 ## 最大可交易数量 / Estimate Tradable Quantity
 
 ```go
-result, err := tc.EstimateTradableQuantity(map[string]interface{}{
-    "account":     "123456",
-    "symbol":      "AAPL",
-    "sec_type":    "STK",
-    "action":      "BUY",
-    "order_type":  "LMT",
-    "limit_price": 150.0,
+qty, err := tc.EstimateTradableQuantity(model.EstimateTradableQuantityRequest{
+    Account:    "123456",
+    Symbol:     "AAPL",
+    SecType:    "STK",
+    Action:     "BUY",
+    OrderType:  "LMT",
+    LimitPrice: 150.0,
 })
-
-// 返回字段 / Response fields:
-// tradableQuantity          - 现金可买/卖数量
-// financingQuantity         - 融资融券可买/卖数量
-// positionQuantity          - 持仓数量
-// tradablePositionQuantity  - 持仓可交易数量
-
-var qty map[string]interface{}
-json.Unmarshal(result, &qty)
 ```
+
+返回 `*model.EstimateTradableQuantity`，含现金可买/卖数量、融资融券可买/卖数量、
+持仓数量与持仓可交易数量。期权可额外传 `Expiry`/`Strike`/`Right`。
 
 ---
 
@@ -192,45 +181,90 @@ json.Unmarshal(result, &qty)
 ### 查询可转出金额 / Query Available Amount
 
 ```go
-result, err := tc.SegmentFundAvailable(map[string]interface{}{
-    "account":      "123456",
-    "from_segment": "SEC",   // SEC / FUT
-    "currency":     "USD",
+avail, err := tc.SegmentFundAvailable(model.SegmentFundRequest{
+    Account:     "123456",
+    FromSegment: "SEC",  // SEC / FUT
+    Currency:    "USD",
 })
-// 返回 fromSegment, currency, amount
 ```
 
 ### 发起转账 / Transfer
 
 ```go
-result, err := tc.SegmentFundTransfer(map[string]interface{}{
-    "account":      "123456",
-    "from_segment": "SEC",
-    "to_segment":   "FUT",
-    "currency":     "USD",
-    "amount":       1000.0,
+transferred, err := tc.TransferSegmentFund(model.SegmentFundRequest{
+    Account:     "123456",
+    FromSegment: "SEC",
+    ToSegment:   "FUT",
+    Currency:    "USD",
+    Amount:      1000.0,
 })
 // 转账状态 status: NEW / PROC / SUCC / FAIL / CANC
 ```
 
----
+> 方法名是 `TransferSegmentFund`（动词在前），**不是** `SegmentFundTransfer`。
+> The method is `TransferSegmentFund`.
 
-## 出入金记录 / Deposit & Withdrawal Records
+### 撤销转账 / Cancel Transfer
 
 ```go
-result, err := tc.DepositWithdraw(map[string]interface{}{
-    "account": "123456",
+cancelled, err := tc.CancelSegmentFund(model.SegmentFundRequest{
+    Account: "123456",
+    ID:      "transfer_id",
+})
+```
+
+### 转账历史 / Transfer History
+
+```go
+history, err := tc.SegmentFundHistory(model.SegmentFundRequest{
+    Account: "123456",
+    Limit:   20,
+})
+```
+
+---
+
+## 出入金记录 / Funding Records
+
+SDK 没有 `DepositWithdraw` 方法，用以下两个接口 / There is no `DepositWithdraw`; use:
+
+```go
+// 出入金流水 / Funding history
+funding, err := tc.FundingHistory(model.FundingHistoryRequest{
+    Account: "123456",
+    SegType: "SEC",
 })
 
-// 每条记录字段 / Record fields:
-// type         - 1(入金) / 3(出金) / 20(出金费用) 等
-// typeDesc     - 类型描述
-// currency     - 币种
-// amount       - 金额
-// businessDate - 业务日期
+// 资金明细 / Fund details
+details, err := tc.FundDetails(model.FundDetailsRequest{
+    Account:   "123456",
+    SegTypes:  []string{"SEC"},
+    Currency:  "USD",
+    StartDate: 1767225600000,  // 毫秒时间戳
+    EndDate:   1769904000000,
+    Limit:     50,
+})
+```
 
-var records []map[string]interface{}
-json.Unmarshal(result, &records)
+---
+
+## 聚合资产 / Aggregate Assets
+
+```go
+agg, err := tc.AggregateAssets(model.AggregateAssetsRequest{
+    Account: "123456",
+})
+```
+
+---
+
+## 直接调用 API / Raw API Call
+
+未封装的接口用 `ExecuteRaw`，第二个参数是 **JSON 字符串** / Second arg is a **JSON string**:
+
+```go
+raw, err := httpClient.ExecuteRaw("accounts", `{}`)
+fmt.Println(raw)
 ```
 
 ---
@@ -239,7 +273,7 @@ json.Unmarshal(result, &records)
 
 - 环球账户(Global)用 `Assets()`，综合/模拟账户(Standard/Paper)用 `PrimeAssets()`
 - Segment 分类：S=证券, C=期货, F=基金, D=数字货币
-- 所有 API 返回 `(json.RawMessage, error)`，需自行 `json.Unmarshal` 解析
-- 持仓使用 `positionQty` 字段，旧字段 `position`+`positionScale` 已废弃
-- `maintainMargin` 低于 0 时会触发强制平仓
-- 机构用户额外传 `"secret_key"` 字段
+- 所有方法接收 `model.XxxRequest` 结构体，返回强类型结构体；只有 `ExecuteRaw` 返回 JSON 字符串
+- 持仓使用 `PositionQty` 字段，旧字段 `Position`+`PositionScale` 已废弃
+- `MaintainMargin` 低于 0 时会触发强制平仓
+- 机构用户在请求结构体上设置 `SecretKey` 字段，或调用 `tc.SetSecretKey(key)` 全局设置

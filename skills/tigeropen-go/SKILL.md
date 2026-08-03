@@ -48,6 +48,7 @@ import (
 
     "github.com/tigerfintech/openapi-go-sdk/client"
     "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/model"
     "github.com/tigerfintech/openapi-go-sdk/quote"
     "github.com/tigerfintech/openapi-go-sdk/trade"
 )
@@ -68,16 +69,23 @@ func main() {
 
     // 3. 查询行情 / Query quotes
     qc := quote.NewQuoteClient(httpClient)
-    result, err := qc.QuoteRealTime([]string{"AAPL", "TSLA"})
+    briefs, err := qc.GetRealTimeQuote(model.BriefRequest{
+        Symbols: []string{"AAPL", "TSLA"},
+    })
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Println(string(result))
+    for _, b := range briefs {
+        fmt.Printf("%s latest=%.2f\n", b.Symbol, b.LatestPrice)
+    }
 
     // 4. 交易操作 / Trading
     tc := trade.NewTradeClient(httpClient, cfg.Account)
-    orders, err := tc.Orders()
-    fmt.Println(string(orders))
+    orders, err := tc.Orders(model.OrdersRequest{Limit: 20})
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println("orders:", len(orders))
 }
 ```
 

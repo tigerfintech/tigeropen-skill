@@ -66,7 +66,7 @@ TigerConfig config = new TigerConfig()
 | `Language` | `Language.zh_CN` / `Language.en_US` | `Language.en_US` |
 | `TimeZone` | `CustomTimeZone.HK_ZONE` 等 | — |
 | `FailRetryCounts` | HTTP 重试次数（0–5，Polly 指数退避） | 2 |
-| `AutoGrabPermission` | 自动申请行情权限 | `false` |
+| `AutoGrabPermission` | 自动申请行情权限 | `true` |
 | `UseFullTick` | 使用完整逐笔数据 | `false` |
 | `IsSslSocket` | 推送连接使用 SSL | `true` |
 
