@@ -9,7 +9,7 @@
 
 ```toml
 [dependencies]
-tigeropen = "0.1"
+tigeropen = "0.5"
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
 ```
@@ -55,7 +55,14 @@ export TIGEROPEN_PRIVATE_KEY=your_rsa_private_key
 export TIGEROPEN_ACCOUNT=your_account
 ```
 
-> 优先级：环境变量 > Builder 设置 > properties 文件
+支持的环境变量仅这五个 / Only these five env vars are read:
+`TIGEROPEN_TIGER_ID`、`TIGEROPEN_PRIVATE_KEY`、`TIGEROPEN_ACCOUNT`、
+`TIGEROPEN_TOKEN`、`TIGEROPEN_TOKEN_FILE`。
+
+未显式设置必填字段时，SDK 会按 `./tiger_openapi_config.properties` →
+`~/.tigeropen/tiger_openapi_config.properties` 顺序自动查找配置文件；
+显式调用过 `.properties_file()` 则跳过自动查找。
+If required fields are unset, the SDK auto-discovers a properties file in that order.
 
 ### 配置项说明 / Config Options
 
@@ -64,22 +71,28 @@ export TIGEROPEN_ACCOUNT=your_account
 | `.tiger_id(id)` | 开发者 ID | ✅ |
 | `.private_key(key)` | RSA 私钥 PEM 字符串 | ✅ |
 | `.account(account)` | 交易账户号 | - |
+| `.secret_key(key)` | 机构用户 secret key | - |
 | `.properties_file(path)` | .properties 文件路径 | - |
 | `.license(license)` | 牌照类型（如 `"TBNZ"`） | - |
 | `.language(Language::EnUs)` | `Language::ZhCn` / `Language::EnUs` | - |
 | `.timezone(tz)` | 时区字符串 | - |
 | `.timeout(Duration::from_secs(30))` | 请求超时（默认 15s） | - |
+| `.enable_dynamic_domain(bool)` | 动态域名 | - |
+| `.token(token)` | 直接注入 token | - |
+| `.token_refresh_duration(d)` | token 自动刷新周期 | - |
+| `.device_id(id)` | 设备 ID | - |
 
 ---
 
 ## 客户端创建 / Create Clients
 
 ```rust
-use tigeropen::config::ClientConfig;
+use std::sync::Arc;
 use tigeropen::client::http_client::HttpClient;
+use tigeropen::config::ClientConfig;
+use tigeropen::push::PushClient;
 use tigeropen::quote::QuoteClient;
 use tigeropen::trade::TradeClient;
-use tigeropen::push::PushClient;
 
 let config = ClientConfig::builder()
     .tiger_id("your_tiger_id")
@@ -87,57 +100,102 @@ let config = ClientConfig::builder()
     .account("your_account")
     .build()?;
 
-let http_client = HttpClient::new(config.clone())?;
+// 推荐：每个客户端从 config 构造（HttpClient 不实现 Clone）
+// Recommended: build each client from config — HttpClient is NOT Clone
+let qc = QuoteClient::from_config(config.clone());
+let tc = TradeClient::from_config(config.clone());
 
-let qc = QuoteClient::new(&http_client);           // 行情客户端
-let tc = TradeClient::new(&http_client, &config.account); // 交易客户端
-let pc = PushClient::new(config, None);            // 推送客户端
+// PushClient 需要包在 Arc 中才能连接
+// PushClient must be wrapped in an Arc to connect
+let pc = Arc::new(PushClient::new(config.clone(), None));
+```
+
+若要手动构造 `HttpClient`，注意两点 / When building `HttpClient` manually, note:
+
+```rust
+// 1. HttpClient::new 返回 Self，不是 Result —— 不要加 `?`
+//    HttpClient::new returns Self, not Result — do NOT add `?`
+// 2. 客户端按【值】接收 HttpClient，不是引用；且 HttpClient 不可 clone，
+//    所以一个 HttpClient 只能交给一个客户端
+//    Clients take HttpClient BY VALUE (not by reference), and it is not Clone
+{
+    let http_client = HttpClient::new(config.clone());
+    let tc_manual = TradeClient::new(http_client, config.account.clone());
+}
+```
+
+机构用户可注入 secret key / Institutional users can inject a secret key:
+
+```rust
+let tc3 = TradeClient::with_secret_key(
+    HttpClient::new(config.clone()),
+    config.account.clone(),
+    "your_secret_key",
+);
 ```
 
 ---
 
 ## 通用 API 调用 / Generic API Call
 
-当 SDK 未封装某个 API 时，直接调用：
+当 SDK 未封装某个 API 时，用 `execute`。第二个参数是 **JSON 字符串**，返回 **String**。
+Use `execute`; the second arg is a **JSON string** and it returns a **String**.
+（没有 `execute_raw` 方法 / there is no `execute_raw` method.）
+
+```rust
+let http_client = HttpClient::new(config.clone());
+let raw = http_client.execute("market_state", r#"{"market":"US"}"#).await?;
+println!("{}", raw);
+```
+
+需要动态构造入参时先序列化 / Serialize dynamic params first:
 
 ```rust
 use serde_json::json;
 
-let result = http_client.execute_raw(
-    "market_state",
-    json!({"market": "US"})
-).await?;
-
-println!("{}", serde_json::to_string_pretty(&result)?);
+let body = json!({"market": "US"}).to_string();
+let raw2 = http_client.execute("market_state", &body).await?;
 ```
 
 ---
 
 ## 错误处理 / Error Handling
 
+`TigerError::Api` 是**结构体变体**，不是元组变体 / `TigerError::Api` is a **struct variant**:
+
 ```rust
 use tigeropen::error::TigerError;
+use tigeropen::model::quote_requests::BriefRequest;
 
-match qc.quote_real_time(&["AAPL"]).await {
-    Ok(Some(data)) => {
-        // data 是 serde_json::Value，需手动解析
-        println!("{}", serde_json::to_string_pretty(&data)?);
+match qc.get_real_time_quote(BriefRequest {
+    symbols: Some(vec!["AAPL".to_string()]),
+    ..Default::default()
+}).await {
+    Ok(briefs) => {
+        for b in briefs {
+            println!("{} {:?}", b.symbol, b.latest_price);
+        }
     }
-    Ok(None) => println!("无数据"),
-    Err(TigerError::Api(msg)) => eprintln!("API 错误: {}", msg),
+    Err(TigerError::Api { code, message }) => eprintln!("API 错误 code={} msg={}", code, message),
     Err(TigerError::Network(e)) => eprintln!("网络错误: {}", e),
+    Err(TigerError::Auth(msg)) => eprintln!("认证错误: {}", msg),
     Err(TigerError::Config(msg)) => eprintln!("配置错误: {}", msg),
-    Err(e) => eprintln!("其他错误: {}", e),
+    Err(TigerError::Parse(msg)) => eprintln!("解析错误: {}", msg),
 }
 ```
+
+`TigerError` 共五个变体：`Api { code, message }`、`Network`、`Auth`、`Config`、`Parse`。
+穷尽匹配时五个都要覆盖 / All five must be covered in an exhaustive match.
 
 ---
 
 ## 完整示例 / Full Example
 
 ```rust
-use tigeropen::config::ClientConfig;
 use tigeropen::client::http_client::HttpClient;
+use tigeropen::config::ClientConfig;
+use tigeropen::model::quote_requests::BriefRequest;
+use tigeropen::model::trade_requests::OrdersRequest;
 use tigeropen::quote::QuoteClient;
 use tigeropen::trade::TradeClient;
 
@@ -149,23 +207,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .account("your_account")
         .build()?;
 
-    let http_client = HttpClient::new(config.clone())?;
-
-    // 查询实时行情
-    let qc = QuoteClient::new(&http_client);
-    if let Some(data) = qc.quote_real_time(&["AAPL", "TSLA"]).await? {
-        println!("行情: {}", serde_json::to_string_pretty(&data)?);
+    // 查询实时行情 / Query real-time quotes
+    let qc = QuoteClient::from_config(config.clone());
+    let briefs = qc
+        .get_real_time_quote(BriefRequest {
+            symbols: Some(vec!["AAPL".to_string(), "TSLA".to_string()]),
+            ..Default::default()
+        })
+        .await?;
+    for b in &briefs {
+        println!("{} latest={:?}", b.symbol, b.latest_price);
     }
 
-    // 查询订单
-    let tc = TradeClient::new(&http_client, &config.account);
-    if let Some(orders) = tc.orders().await? {
-        println!("订单: {}", serde_json::to_string_pretty(&orders)?);
-    }
+    // 查询订单 / Query orders
+    let tc = TradeClient::new(HttpClient::new(config.clone()), config.account.clone());
+    let orders = tc
+        .get_orders(OrdersRequest {
+            limit: Some(20),
+            ..Default::default()
+        })
+        .await?;
+    println!("orders: {}", orders.len());
 
     Ok(())
 }
 ```
+
+---
+
+## Token 自动刷新 / Token Auto-refresh
+
+```rust
+// 查询当前 token / Query the current token
+let token = qc.query_token().await?;
+
+// 手动刷新（token_manager 可传 None）/ Manual refresh (token_manager may be None)
+qc.refresh_token(None).await?;
+
+// 后台自动刷新：返回 Arc<TokenManager>，需保留句柄以便停止
+// Background auto-refresh: keep the returned handle to stop it later
+let tm = qc.start_token_auto_refresh(86400, 300, None);
+// tm.stop_auto_refresh();
+```
+
+`TradeClient` 上有同名方法 / The same methods exist on `TradeClient`.
 
 ---
 
@@ -183,7 +268,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 参考官方文档 https://docs.itigerup.com/docs/prepare，使用 RSA-2048 生成密钥对，上传公钥到开发者后台。
 
 **Q: 返回值格式?**
-所有 API 返回 `Result<Option<serde_json::Value>, TigerError>`，需手动用 `serde_json` 解析。
+封装好的 API 返回强类型结构体（如 `Vec<Brief>`、`Vec<Order>`），直接取字段。
+只有底层的 `http_client.execute()` 返回 `String`。
+
+**Q: `HttpClient::new` 要不要加 `?`?**
+不要。它返回 `Self`，加 `?` 会编译失败。
 
 **Q: 模拟账户和实盘账户区别?**
 模拟账户在开发者后台申请。SDK 根据账号自动识别模拟/实盘账户并路由到对应域名，无需额外配置。
