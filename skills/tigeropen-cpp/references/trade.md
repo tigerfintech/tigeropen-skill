@@ -64,15 +64,19 @@ Contract fut = ContractUtil::future_contract(U("CL2509"), U("USD"));
 <!-- OrderUtil 是构造 Order 对象的工厂 -->
 
 ```cpp
-// 限价单 / Limit order
+utility::string_t account = config.account;
+
+// 限价单 / Limit order（limit_order 有不带 account 的重载）
 Order lmt_order = OrderUtil::limit_order(stock, U("BUY"), 100, 150.0);
 
 // 市价单 / Market order
-Order mkt_order = OrderUtil::market_order(stock, U("BUY"), 100);
+Order mkt_order = OrderUtil::market_order(account, stock, U("BUY"), 100);
 
 // 止损限价单 / Stop-limit order
-Order stp_lmt = OrderUtil::stop_limit_order(stock, U("SELL"), 100, 145.0, 148.0);
-// 参数: contract, action, qty, limitPrice, auxPrice(触发价)
+Order stp_lmt = OrderUtil::stop_limit_order(account, stock, U("SELL"), 100, 145.0, 148.0);
+// 参数: account, contract, action, qty, limitPrice, auxPrice(触发价)
+// ⚠️ 除 limit_order 外，其他 OrderUtil 工厂方法【都必须】传 account 作为第一个参数
+// Only limit_order has an account-less overload; all other factories require account first.
 
 // 盘后交易 / After-hours
 lmt_order.outside_rth = true;

@@ -17,7 +17,7 @@
 ### 港股期权特殊处理 / HK Option Special Handling
 
 - 港股期权标的代码不同于正股 / HK option underlyings differ from stock codes: `00700` → `TCH`（腾讯）
-- 使用 `OPTION_SYMBOL` 查询港股期权代码映射
+- 使用 `ALL_HK_OPTION_SYMBOLS` 查询港股期权代码映射
 
 ---
 
@@ -106,7 +106,7 @@ ucout << result << endl;
 value obj = value::object(true);
 obj[U("market")] = value::string(U("HK"));
 
-value result = quote_client->post(OPTION_SYMBOL, obj);
+value result = quote_client->post(ALL_HK_OPTION_SYMBOLS, obj);
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -306,29 +306,21 @@ ucout << result << endl;
 
 ---
 
-## 期权指标计算 / Option Indicator Calculation
+## 单合约指标与 Greeks / Per-contract Greeks
+
+SDK **没有** `OPTION_INDICATOR` 接口。单个合约的 Greeks / 隐含波动率通过
+期权链（带 Greeks）或期权行情获取。
+There is no `OPTION_INDICATOR` API; get Greeks from the option chain or option brief.
 
 ```cpp
-// 查询单个期权的盘中实时指标（Greeks、IV、杠杆等）
-value obj = value::object(true);
-obj[U("symbol")] = value::string(U("BABA"));
-obj[U("right")] = value::string(U("CALL"));
-obj[U("strike")] = value::string(U("205.0"));
-obj[U("expiry")] = value::string(U("2019-11-01"));  // yyyy-MM-dd
+// 方式一：期权链带 Greeks（option_filter 可传 greeks 条件）
+value chain_greeks = quote_client->get_option_chain(U("AAPL"), U("2026-08-21"));
 
-value result = quote_client->post(OPTION_INDICATOR, obj);
-ucout << result << endl;
+// 方式二：单合约行情（identifier 形式）
+value brief_one = quote_client->get_option_brief(U("AAPL  260821C00150000"));
+ucout << brief_one << endl;
 
-// 返回字段 / Response fields:
-// delta/gamma/theta/vega/rho  - 希腊字母
-// insideValue      - 内在价值
-// timeValue        - 时间价值
-// leverage         - 杠杆率
-// openInterest     - 未平仓量
-// historyVolatility - 历史波动率（百分比，如24.38表示24.38%）
-// volatility       - 隐含波动率（百分比）
-// premiumRate      - 溢价率（百分比）
-// profitRate       - 买入盈利率（百分比）
+// 返回含 delta/gamma/theta/vega/rho、隐含波动率、未平仓量、内在价值与时间价值等
 ```
 
 ---
@@ -343,7 +335,7 @@ ucout << result << endl;
 // 美股 US: "AAPL  250829C00150000"
 //   格式: 标的(padding至6位) + YYMMDD + C/P + 行权价*1000(8位)
 // 港股 HK: "TCH.HK 230616C00550000"
-//   使用映射后的代码 / Use mapped symbol from OPTION_SYMBOL
+//   使用映射后的代码 / Use mapped symbol from ALL_HK_OPTION_SYMBOLS
 ```
 
 ---
@@ -374,42 +366,31 @@ ucout << result << endl;
 
 ## 多腿组合策略 / Multi-leg Combo Strategies
 
+组合单用 `OrderUtil::multi_leg_order` 构造后交给 `place_order`。
+**没有** `PLACE_COMBO_ORDER` 常量。
+Build combos with `OrderUtil::multi_leg_order` + `place_order`; there is no
+`PLACE_COMBO_ORDER` constant.
+
 ```cpp
 // 牛市看涨价差 / Bull Call Spread (VERTICAL)
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("combo_type")] = value::string(U("VERTICAL"));
-obj[U("action")] = value::string(U("BUY"));
-obj[U("order_type")] = value::string(U("LMT"));
-obj[U("limit_price")] = value::number(3.0);
-obj[U("quantity")] = value::number(1);
+// ContractLeg(sec_type, symbol, strike, expiry, right, action, ratio)
+std::vector<ContractLeg> legs;
+legs.push_back(ContractLeg(U("OPT"), U("AAPL"), U("145.0"), U("20260821"),
+                           U("CALL"), U("BUY"), 1));
+legs.push_back(ContractLeg(U("OPT"), U("AAPL"), U("155.0"), U("20260821"),
+                           U("CALL"), U("SELL"), 1));
 
-value legs = value::array();
-
-value leg1 = value::object(true);
-leg1[U("symbol")] = value::string(U("AAPL"));
-leg1[U("sec_type")] = value::string(U("OPT"));
-leg1[U("expiry")] = value::string(U("20250829"));
-leg1[U("strike")] = value::number(145.0);
-leg1[U("right")] = value::string(U("CALL"));
-leg1[U("action")] = value::string(U("BUY"));
-leg1[U("ratio")] = value::number(1);
-legs[0] = leg1;
-
-value leg2 = value::object(true);
-leg2[U("symbol")] = value::string(U("AAPL"));
-leg2[U("sec_type")] = value::string(U("OPT"));
-leg2[U("expiry")] = value::string(U("20250829"));
-leg2[U("strike")] = value::number(155.0);
-leg2[U("right")] = value::string(U("CALL"));
-leg2[U("action")] = value::string(U("SELL"));
-leg2[U("ratio")] = value::number(1);
-legs[1] = leg2;
-
-obj[U("legs")] = legs;
-value result = trade_client->post(PLACE_COMBO_ORDER, obj);
-ucout << result << endl;
+// multi_leg_order(account, combo_type, legs, action, quantity, order_type,
+//                 limit_price = 0, aux_price = 0, trailing_percent = 0)
+Order combo = OrderUtil::multi_leg_order(U("123456"), U("VERTICAL"), legs,
+                                         U("BUY"), 1, U("LMT"), 3.0);
+value combo_result = trade_client->place_order(combo);
+ucout << combo_result << endl;
 ```
+
+> ⚠️ 组合单（以及 OCA / 附加止盈止损单）**不支持 `preview_order`**，服务端返回
+> `OCA/ATTACHED order preview not supported`（错误码 1010），请直接 `place_order`。
+> Combo/OCA/attached orders do NOT support `preview_order` (server error 1010).
 
 ### 组合策略类型 / Combo Strategy Types
 
@@ -447,7 +428,7 @@ ucout << result << endl;
 
 ## 注意事项 / Notes
 
-- 港股期权需先用 `OPTION_SYMBOL` 获取代码映射 / HK options require symbol mapping
+- 港股期权需先用 `ALL_HK_OPTION_SYMBOLS` 获取代码映射 / HK options require symbol mapping
 - 期权每张合约通常代表100股标的 / Each contract = 100 shares
 - 期权链返回的 Greeks 为上一交易日收盘值 / Chain Greeks are from previous close
 - 行权价小数位须和期权链一致 / Strike decimals must match the option chain

@@ -7,55 +7,64 @@
 
 | 依赖 Dependency | 版本 Version | 说明 |
 |----------------|-------------|------|
-| C++ | 17+ | 必须 |
+| C++ | **14**（构建基线） | SDK 以 C++14 编译；使用方项目可用 C++17+ |
 | CMake | 3.15+ | 构建系统 |
-| Boost | 1.86 | system/thread/log/chrono/filesystem |
-| cpprestsdk | latest | HTTP client（Microsoft REST SDK） |
-| Protobuf | v25.1 | 推送消息序列化 |
-| OpenSSL | latest | TLS 支持 |
+| Boost | **1.86.0** | thread/log/program_options/chrono/filesystem |
+| cpprestsdk | 源码构建（git master） | HTTP client（Microsoft REST SDK） |
+| Protobuf | **5.28.3** | 推送消息序列化 |
+| Abseil | **20240722.0**（固定版本） | Protobuf 依赖，必须与之匹配 |
+| OpenSSL | 3.x 推荐 | TLS 支持 |
+
+> ⚠️ **Abseil 版本必须固定在 20240722.0**。Homebrew 的新版 Abseil 需要 C++17 头文件，
+> 与 C++14 基线冲突，会导致编译失败或 `absl::string_view` / `std::string_view` ABI 不匹配。
+> Abseil must stay pinned at 20240722.0; newer Homebrew builds require C++17 headers.
 
 ---
 
 ## 安装依赖 / Install Dependencies
 
-### macOS
+**推荐用仓库自带的构建脚本**，它会按固定版本拉取并编译 Boost / cpprestsdk /
+Abseil / Protobuf，避免手动安装造成版本错配。
+Use the bundled build scripts — they pin every dependency version.
+
+### macOS / Linux
 
 ```bash
-# Homebrew 安装 / Install via Homebrew
-brew install boost cpprestsdk protobuf openssl
-
-# 克隆 SDK
 git clone https://github.com/tigerfintech/openapi-cpp-sdk.git
 cd openapi-cpp-sdk
+
+chmod +x scripts/build_linux_mac.sh
+./scripts/build_linux_mac.sh                      # 默认 Debug，SDK 同时产出 Debug+Release
+BUILD_TYPE=Release ./scripts/build_linux_mac.sh   # 仅 Release
+SKIP_DEMO=1 ./scripts/build_linux_mac.sh          # 跳过 demo
+./scripts/build_linux_mac.sh --demo-only          # 只编 demo
 ```
 
-### Linux (Ubuntu/Debian)
+其他可用环境变量：`SKIP_DEPS=1`、`SKIP_PROTO_REGEN=1`、`NUM_JOBS`、`INSTALL_PREFIX`、
+`LOCAL_OPT_PREFIX`（默认 `/usr/local/opt`）。
 
-```bash
-sudo apt-get install -y libboost-all-dev libcpprest-dev libprotobuf-dev protobuf-compiler libssl-dev
+### Windows
+
+```powershell
+.\scripts\build_windows.ps1 -Triplet x64-windows -BuildType Release -Runtime MD
 ```
 
----
+`-Triplet` 可选 `x64-windows` / `x86-windows` / `arm64-windows`（及对应 `-static`），
+`-Runtime` 可选 `MD` / `MT`；另有 `-SkipDeps` / `-SkipDemo` / `-ProtobufProvider Source`。
 
-## 构建 / Build
+也可直接走 MSBuild（8 种配置：`{Debug,Release}-{MD,MT}` × `{x64,Win32}`）：
 
-```bash
-mkdir build && cd build
-
-# macOS
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j4
-
-# Linux
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
-
-# Windows (vcpkg)
-cmake .. -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
-cmake --build . --config Release
+```powershell
+msbuild openapi-cpp-sdk.vcxproj /t:Rebuild /p:Configuration=Release-MD /p:Platform=x64 /m /nr:false
 ```
 
-构建产物：`output/` 目录下包含 SDK 库文件和头文件。
+### 构建产物 / Build Output
+
+- macOS：`output/Mac/<Config>/{lib,include}`（如 `output/Mac/Release/lib/libtigerapi.a`）
+- Linux：`output/Linux/<Config>/{lib,include}`
+- Windows：`output/Windows/{x64,Win32}/<Config>/`（`openapi-cpp-sdk.dll` / `.lib`）
+
+仓库也提供预编译包：`output/Mac/{Debug,Release}.zip` 等。
 
 ---
 
@@ -95,8 +104,11 @@ ClientConfig config(false, "path/to/config/dir/");
 ```
 
 `ClientConfig` 构造参数：
-- 第一个参数（bool）：`true` = 沙箱，`false` = 生产
+- 第一个参数（bool）：**固定传 `false`**
 - 第二个参数（string_t）：配置文件目录路径
+
+这个构造函数是唯一会自动读取 properties 文件与 token 的重载。
+This is the only ctor that loads the properties file and token.
 
 ---
 
@@ -113,16 +125,16 @@ using namespace web;
 using namespace web::json;
 using namespace TIGER_API;
 
-ClientConfig config(false, "demo/openapi_cpp_test/");
+ClientConfig demo_config(false, "demo/openapi_cpp_test/");
 
 // 行情客户端 / Quote client
-auto quote_client = make_shared<QuoteClient>(config);
+auto quote_client = make_shared<QuoteClient>(demo_config);
 
 // 交易客户端 / Trade client
-auto trade_client = make_shared<TradeClient>(config);
+auto trade_client = make_shared<TradeClient>(demo_config);
 
-// 推送客户端 / Push client
-shared_ptr<IPushClient> push_client = IPushClient::create_push_client(config);
+// 推送客户端：用静态工厂，不能 new / use the static factory, not `new`
+shared_ptr<IPushClient> push_client = IPushClient::create_push_client(demo_config);
 ```
 
 ---
@@ -162,12 +174,12 @@ auto client = make_shared<TigerClient>(config);
 value obj = value::object(true);
 obj[U("market")] = value::string(U("US"));
 
-// 第一个参数为 API 名称常量，在 enums.h 中定义
+// 第一个参数为 API 名称常量，在 service_types.h 中定义
 value result = client->post(MARKET_STATE, obj);
 ucout << result << endl;
 ```
 
-常用 API 名称常量（在 `tigerapi/enums.h` 中）：
+常用 API 名称常量（在 **`tigerapi/service_types.h`** 中，共 89 个）：
 
 | 常量 | API |
 |------|-----|
@@ -182,27 +194,28 @@ ucout << result << endl;
 
 ## 工程集成 / CMakeLists.txt Example
 
-在自己的项目中使用已编译好的 SDK（`output/Mac/sdk/Release/`）：
+在自己的项目中使用已编译好的 SDK（`output/Mac/Release/`）：
 
 ```cmake
 cmake_minimum_required(VERSION 3.15)
 project(my_tiger_app CXX)
+# SDK 本身以 C++14 编译；使用方项目可以用 C++17 或更高
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(Boost REQUIRED COMPONENTS system thread log chrono filesystem)
+find_package(Boost REQUIRED COMPONENTS thread log program_options chrono filesystem)
 find_package(cpprestsdk CONFIG REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # SDK 头文件和库路径
-set(TIGERAPI_DIR /path/to/openapi-cpp-sdk/output/Mac/sdk/Release)
+set(TIGERAPI_DIR /path/to/openapi-cpp-sdk/output/Mac/Release)
 include_directories(${TIGERAPI_DIR}/include)
 link_directories(${TIGERAPI_DIR}/lib)
 
 add_executable(my_app main.cpp)
 target_link_libraries(my_app
     tigerapi
-    Boost::system Boost::thread Boost::log Boost::chrono Boost::filesystem
+    Boost::thread Boost::log Boost::program_options Boost::chrono Boost::filesystem
     cpprestsdk::cpprest
     ${Protobuf_LIBRARIES}
     OpenSSL::SSL OpenSSL::Crypto

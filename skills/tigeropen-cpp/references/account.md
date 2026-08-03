@@ -138,7 +138,7 @@ obj[U("end_date")] = value::string(U("2024-01-31"));
 // obj[U("seg_type")] = value::string(U("SEC"));  // SEC / FUT
 // obj[U("currency")] = value::string(U("USD"));
 
-value result = trade_client->post(PRIME_ANALYTICS_ASSET, obj);
+value result = trade_client->post(ANALYTICS_ASSET, obj);
 
 // summary 字段 / Summary fields:
 // pnl                - 盈亏金额
@@ -203,7 +203,7 @@ obj[U("to_segment")] = value::string(U("FUT"));
 obj[U("currency")] = value::string(U("USD"));
 obj[U("amount")] = value::number(1000.0);
 
-value result = trade_client->post(SEGMENT_FUND_TRANSFER, obj);
+value result = trade_client->post(TRANSFER_SEGMENT_FUND, obj);
 // 转账状态 / Transfer status: NEW / PROC / SUCC / FAIL / CANC
 ```
 
@@ -215,7 +215,7 @@ value result = trade_client->post(SEGMENT_FUND_TRANSFER, obj);
 value obj = value::object(true);
 obj[U("account")] = value::string(U("123456"));
 
-value result = trade_client->post(DEPOSIT_WITHDRAW, obj);
+value result = trade_client->post(TRANSFER_FUND, obj);
 
 // 每条记录字段 / Record fields:
 // type         - 1(入金) / 3(出金) / 20(出金费用) 等

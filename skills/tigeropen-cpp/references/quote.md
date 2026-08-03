@@ -54,7 +54,7 @@ for (auto& q : quotes) {
 value get_brief(const value& symbols,
                 bool include_hour_trading = false,
                 bool include_ask_bid = false,
-                QuoteRight right = QuoteRight::BR);
+                QuoteRight right = QuoteRight::br);
 ```
 
 ---
@@ -77,7 +77,7 @@ for (auto& k : klines) {
 }
 
 // 使用枚举 / Use enum
-value result2 = qc->get_kline(symbols, BarPeriod::DAY, -1, -1, QuoteRight::BR, 251);
+value result2 = qc->get_kline(symbols, BarPeriod::DAY, -1, -1, QuoteRight::br, 251);
 ```
 
 ---
@@ -185,7 +185,9 @@ ucout << contracts << endl;
 // 期货实时行情 / Future real-time quotes
 value symbols = value::array();
 symbols[0] = value::string(U("CL2509"));
-vector<FutureQuote> quotes = qc->get_future_real_time_quote(symbols);
+value contract_codes = value::array();
+contract_codes[0] = value::string(U("CLmain"));
+vector<RealtimeQuote> quotes = qc->get_future_real_time_quote(contract_codes);
 for (auto& q : quotes) {
     ucout << q.to_string() << endl;
 }
