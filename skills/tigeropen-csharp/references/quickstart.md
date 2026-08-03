@@ -85,11 +85,17 @@ QuoteClient quoteClient = new QuoteClient(config);
 // 交易客户端 / Trade client
 TradeClient tradeClient = new TradeClient(config);
 
-// 推送客户端（单例）/ Push client (singleton)
+// 推送客户端（单例，私有构造函数，只能通过 GetInstance 获取）
+// Push client — singleton with a private ctor; use GetInstance()
+// MyCallback 需自行实现 IApiComposeCallback（27 个成员），详见 push.md
 PushClient pushClient = PushClient.GetInstance()
     .Config(config)
     .ApiComposeCallback(new MyCallback());
 ```
+
+> 三个客户端的构造参数都是 `TigerConfig`，**不是** `HttpClient`。
+> `PushClient` 不能 `new`（构造函数是 private），必须用 `PushClient.GetInstance()`。
+> All three clients take a `TigerConfig`; `PushClient` must come from `GetInstance()`.
 
 ---
 
@@ -124,36 +130,56 @@ QuoteRealTimeQuoteResponse asyncResponse = await quoteClient.ExecuteAsync(reques
 
 ## 错误处理 / Error Handling
 
+**`Execute` / `ExecuteAsync` 不会向调用方抛出异常**：SDK 内部捕获所有异常，
+返回一个 `Code = 3`（`TigerApiCode.CLIENT_API_ERROR`）、`Message` 形如
+`"sdk send request exception(...)"` 的错误响应。因此应检查 `IsSuccess()` / `Code`，
+而不是 `try/catch`。
+`Execute`/`ExecuteAsync` swallow exceptions and return an error response
+(`Code = 3`), so check `IsSuccess()` instead of catching.
+
 ```csharp
-using TigerOpenAPI.Common.Exceptions;
-
-try
+var quoteRequest = new TigerRequest<QuoteRealTimeQuoteResponse>()
 {
-    var request = new TigerRequest<QuoteRealTimeResponse>()
+    ApiMethodName = QuoteApiService.QUOTE_REAL_TIME,
+    ModelValue = new QuoteSymbolModel()
     {
-        ApiMethodName = QuoteApiService.QUOTE_REAL_TIME,
-        ModelValue = new QuoteRealTimeModel()
-        {
-            Symbols = new List<string> { "AAPL" }
-        }
-    };
-    var response = await quoteClient.ExecuteAsync(request);
+        Symbols = new List<string> { "AAPL" }
+    }
+};
+var quoteResponse = await quoteClient.ExecuteAsync(quoteRequest);
 
-    if (response?.Data != null)
+if (quoteResponse != null && quoteResponse.IsSuccess())
+{
+    foreach (var item in quoteResponse.Data)
     {
-        foreach (var item in response.Data)
-        {
-            Console.WriteLine($"{item.Symbol}: {item.LatestPrice}");
-        }
+        Console.WriteLine($"{item.Symbol}: {item.LatestPrice}");
     }
 }
-catch (ApiException ex)
+else
 {
-    Console.WriteLine($"API Error [{ex.Code}]: {ex.Message}");
+    Console.WriteLine($"API Error [{quoteResponse?.Code}]: {quoteResponse?.Message}");
 }
-catch (Exception ex)
+```
+
+SDK 中唯一的异常类型是 `TigerOpenAPI.Common.TigerApiException`
+（属性 `ErrCode`、`ErrMsg`、`TigerApiCode`）。它主要由 `Validate()` 前置校验抛出，
+例如缺少 `Account`。**没有** `ApiException` 类，也没有 `TigerOpenAPI.Common.Exceptions` 命名空间。
+The only exception type is `TigerOpenAPI.Common.TigerApiException`; there is no
+`ApiException` and no `Common.Exceptions` namespace.
+
+```csharp
+try
 {
-    Console.WriteLine($"Error: {ex.Message}");
+    var badRequest = new TigerRequest<PositionsResponse>()
+    {
+        ApiMethodName = TradeApiService.POSITIONS,
+        ModelValue = new PositionsModel()
+    };
+    var r = await tradeClient.ExecuteAsync(badRequest);
+}
+catch (TigerApiException ex)
+{
+    Console.WriteLine($"参数校验失败 [{ex.ErrCode}]: {ex.ErrMsg}");
 }
 ```
 
@@ -161,18 +187,16 @@ catch (Exception ex)
 
 ## 直接调用 API / Raw API Call
 
-当 SDK 封装方法不满足需求时，可直接使用基类 `TigerClient.Execute()`：
+未封装的接口用通用响应类型：`TigerDictResponse`（`Data` 为
+`Dictionary<string, object>`）、`TigerListResponse`、`TigerStringResponse`、
+`TigerListStringResponse`。**没有** `RawResponse` 类型。
+Use the generic response types; there is no `RawResponse`.
 
 ```csharp
-using TigerOpenAPI.Common;
-using TigerOpenAPI.Common.Model;
-
-// QuoteClient 和 TradeClient 均继承自 TigerClient
-// 使用 QuoteApiService / TradeApiService 中的常量作为 ApiMethodName
-var rawRequest = new TigerRequest<RawResponse>()
+var rawRequest = new TigerRequest<TigerDictResponse>()
 {
     ApiMethodName = QuoteApiService.MARKET_STATE,
-    ModelValue = new MarketStateModel() { Market = "US" }
+    ModelValue = new QuoteMarketModel() { Market = Market.US }
 };
 var rawResponse = quoteClient.Execute(rawRequest);
 ```
@@ -181,20 +205,34 @@ var rawResponse = quoteClient.Execute(rawRequest);
 
 ## 模拟账户 vs 实盘 / Paper vs Live
 
-C# SDK 的 `TradeClient` 会自动根据账户号判断是否为模拟账户并路由到不同地址：
+`TradeClient` 根据账户号自动判断模拟/实盘并路由到对应地址
+（`AccountUtil.IsVirtualAccount`）。
 
 ```csharp
-// 模拟账户（Paper）：账户号以特定前缀标识，自动路由
-// 实盘账户（Live）：正常路由到生产环境
-
 // 查询账户列表以确认账户类型 / Query accounts to verify type
+// 注意：ACCOUNTS 接口用基类 ApiModel，没有 AccountModel 类型
 var accountsRequest = new TigerRequest<AccountsResponse>()
 {
     ApiMethodName = TradeApiService.ACCOUNTS,
-    ModelValue = new AccountModel()
+    ModelValue = new ApiModel()
 };
 var accounts = await tradeClient.ExecuteAsync(accountsRequest);
 ```
+
+---
+
+## 自动注入 / Automatic Injection
+
+`TradeClient.Validate()` 在每次请求前自动补全两个字段（已显式赋值的不会被覆盖）：
+
+1. **`Account`** — 除 `TradeApiService.ACCOUNTS` 外，所有交易接口在 `ModelValue.Account`
+   为空时自动填入 `TigerConfig.DefaultAccount`；仍为空则抛 `TigerApiException`
+2. **`SecretKey`** — 当 `ModelValue` 是 `TradeModel` 子类且其 `SecretKey` 为空、
+   且 `TigerConfig.SecretKey` 非空时自动填入（机构用户）
+
+因此示例中通常无需显式传 `Account`。
+`Validate()` auto-fills `Account` (from `DefaultAccount`) and `SecretKey` for
+`TradeModel` subclasses; explicit values are never overwritten.
 
 ---
 

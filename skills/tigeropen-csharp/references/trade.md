@@ -40,7 +40,7 @@ using TigerOpenAPI.Trade.Model;
 var request = new TigerRequest<AccountsResponse>()
 {
     ApiMethodName = TradeApiService.ACCOUNTS,
-    ModelValue = new AccountModel()
+    ModelValue = new ApiModel()
 };
 var response = await tradeClient.ExecuteAsync(request);
 // 返回账户列表，含 accountId, accountType 等
@@ -57,7 +57,7 @@ C# SDK 使用 `PlaceOrderModel` 的静态工厂方法构造订单，再通过 `T
 
 ```csharp
 // 1. 构造合约 / Build contract
-var contract = new Contract()
+var contract = new ContractItem()
 {
     Symbol = "AAPL",
     SecType = "STK",
@@ -124,13 +124,13 @@ var orderModel = PlaceOrderModel.BuildTrailOrder(
 ```csharp
 var orderModel = PlaceOrderModel.BuildLimitOrder(account, contract, ActionType.BUY, 100L, 150.0);
 orderModel.OutsideRth = true;   // 允许盘前盘后
-orderModel.TimeInForce = "GTC"; // GTC / DAY / GTD
+orderModel.TimeInForce = TimeInForce.GTC; // 枚举: GTC / DAY / GTD
 ```
 
 ### 期权下单 / Option Order
 
 ```csharp
-var optContract = new Contract()
+var optContract = new ContractItem()
 {
     Symbol = "AAPL",
     SecType = "OPT",
@@ -151,7 +151,7 @@ var optOrder = PlaceOrderModel.BuildLimitOrder(account, optContract, ActionType.
 ```csharp
 var orderModel = PlaceOrderModel.BuildLimitOrder(account, contract, ActionType.BUY, 100L, 150.0);
 
-var request = new TigerRequest<PreviewOrderResponse>()
+var request = new TigerRequest<PlaceOrderResponse>()
 {
     ApiMethodName = TradeApiService.PREVIEW_ORDER,
     ModelValue = orderModel
@@ -165,15 +165,18 @@ var response = await tradeClient.ExecuteAsync(request);
 ## 修改订单 / Modify Order
 
 ```csharp
+// orderId 来自下单响应：placeResponse.Data.Id
+long orderId = 12345678901234567L;
+
 var modifyModel = new ModifyOrderModel()
 {
     Account = account,
-    Id = orderId,            // 内部订单 ID
+    Id = orderId,            // 内部订单 ID（long）
     LimitPrice = 155.0,      // 新限价
     TotalQuantity = 100L     // 新数量
 };
 
-var request = new TigerRequest<ModifyOrderResponse>()
+var request = new TigerRequest<TigerDictResponse>()
 {
     ApiMethodName = TradeApiService.MODIFY_ORDER,
     ModelValue = modifyModel
@@ -191,7 +194,7 @@ var cancelModel = new CancelOrderModel()
     Id = orderId    // 内部订单 ID（long）
 };
 
-var request = new TigerRequest<CancelOrderResponse>()
+var request = new TigerRequest<TigerDictResponse>()
 {
     ApiMethodName = TradeApiService.CANCEL_ORDER,
     ModelValue = cancelModel
@@ -206,14 +209,14 @@ var response = await tradeClient.ExecuteAsync(request);
 
 ```csharp
 // 全部订单 / All orders
-var request = new TigerRequest<OrderResponse>()
+var request = new TigerRequest<OrderBatchResponse>()
 {
     ApiMethodName = TradeApiService.ORDERS,
     ModelValue = new QueryOrderModel() { Account = account }
 };
 
 // 待成交订单 / Active (pending) orders
-var activeRequest = new TigerRequest<OrderResponse>()
+var activeRequest = new TigerRequest<OrderBatchResponse>()
 {
     ApiMethodName = TradeApiService.ACTIVE_ORDERS,
     ModelValue = new QueryOrderModel() { Account = account }
@@ -222,19 +225,19 @@ var activeRequest = new TigerRequest<OrderResponse>()
 // 已成交订单 / Filled orders
 var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 var ninetyDaysAgo = now - 90L * 24 * 3600 * 1000;
-var filledRequest = new TigerRequest<OrderResponse>()
+var filledRequest = new TigerRequest<OrderBatchResponse>()
 {
     ApiMethodName = TradeApiService.FILLED_ORDERS,
     ModelValue = new QueryOrderModel()
     {
         Account = account,
-        StartTime = ninetyDaysAgo,
-        EndTime = now
+        StartDate = ninetyDaysAgo,
+        EndDate = now
     }
 };
 
 // 已撤销订单 / Cancelled orders
-var inactiveRequest = new TigerRequest<OrderResponse>()
+var inactiveRequest = new TigerRequest<OrderBatchResponse>()
 {
     ApiMethodName = TradeApiService.INACTIVE_ORDERS,
     ModelValue = new QueryOrderModel() { Account = account }
@@ -246,10 +249,10 @@ var inactiveRequest = new TigerRequest<OrderResponse>()
 ## 成交明细 / Order Transactions
 
 ```csharp
-var request = new TigerRequest<TransactionResponse>()
+var request = new TigerRequest<OrderTransactionsResponse>()
 {
     ApiMethodName = TradeApiService.ORDER_TRANSACTIONS,
-    ModelValue = new QueryTransactionModel()
+    ModelValue = new OrderTransactionsModel()
     {
         Account = account,
         OrderId = 31318009878020096L   // 可选
@@ -264,24 +267,24 @@ var request = new TigerRequest<TransactionResponse>()
 <!-- 当用户提到"持仓"、"仓位"、"我的股票"、"positions"时 -->
 
 ```csharp
-var request = new TigerRequest<PositionResponse>()
+var request = new TigerRequest<PositionsResponse>()
 {
     ApiMethodName = TradeApiService.POSITIONS,
-    ModelValue = new QueryPositionModel()
+    ModelValue = new PositionsModel()
     {
         Account = account,
-        SecType = "STK",   // 可选: STK/OPT/FUT
-        Market = "US",     // 可选: US/HK
-        // Symbol = "AAPL" // 可选
+        SecType = SecType.STK,   // 枚举，可选: STK/OPT/FUT
+        Market = Market.US,      // 枚举，可选: US/HK
+        // Symbol = "AAPL"       // 可选
     }
 };
 var response = await tradeClient.ExecuteAsync(request);
 
-if (response?.Data != null)
+if (response?.Data?.Items != null)
 {
-    foreach (var pos in response.Data)
+    foreach (var pos in response.Data.Items)
     {
-        Console.WriteLine($"{pos.Symbol}: qty={pos.Quantity}, " +
+        Console.WriteLine($"{pos.Symbol}: qty={pos.PositionQty}, " +
                           $"cost={pos.AverageCost}, pnl={pos.UnrealizedPnl}");
     }
 }
@@ -292,9 +295,9 @@ if (response?.Data != null)
 | 字段 Field | 说明 Description | APP 对应 |
 |-----------|-----------------|---------|
 | `Symbol` | 标的代码 | — |
-| `Quantity` / `PositionQty` | 持仓数量 | 持有数量 |
+| `PositionQty` | 持仓数量（**没有** `Quantity` 字段） | 持有数量 |
 | `AverageCost` | 含佣金持仓均价 | 平均成本 |
-| `MarketPrice` | 最新价格 | 现价 |
+| `LatestPrice` | 最新价格（**没有** `MarketPrice` 字段） | 现价 |
 | `MarketValue` | 市值 | 市值 |
 | `UnrealizedPnl` | 浮动盈亏 | 未实现盈亏 |
 | `UnrealizedPnlPercent` | 浮动盈亏率 | 盈亏百分比 |
@@ -309,10 +312,10 @@ if (response?.Data != null)
 
 ```csharp
 // 普通账户资产 / Standard account assets
-var request = new TigerRequest<AssetsResponse>()
+var request = new TigerRequest<TigerDictResponse>()
 {
     ApiMethodName = TradeApiService.ASSETS,
-    ModelValue = new QueryAssetModel()
+    ModelValue = new PrimeAssetsModel()
     {
         Account = account,
         BaseCurrency = "USD"  // 统一换算为 USD，多币种时避免直接累加
@@ -320,10 +323,10 @@ var request = new TigerRequest<AssetsResponse>()
 };
 
 // 综合账户资产 (Prime) / Prime account assets
-var primeRequest = new TigerRequest<PrimeAssetsResponse>()
+var primeRequest = new TigerRequest<PrimeAssetResponse>()
 {
     ApiMethodName = TradeApiService.PRIME_ASSETS,
-    ModelValue = new QueryAssetModel() { Account = account }
+    ModelValue = new PrimeAssetsModel() { Account = account }
 };
 var primeResponse = await tradeClient.ExecuteAsync(primeRequest);
 ```
@@ -353,7 +356,7 @@ var primeResponse = await tradeClient.ExecuteAsync(primeRequest);
 ```csharp
 var orderModel = PlaceOrderModel.BuildLimitOrder(account, contract, ActionType.BUY, 1L, 150.0);
 
-var request = new TigerRequest<EstimateTradableQtyResponse>()
+var request = new TigerRequest<EstimateTradableQuantityResponse>()
 {
     ApiMethodName = TradeApiService.ESTIMATE_TRADABLE_QUANTITY,
     ModelValue = orderModel
@@ -432,6 +435,6 @@ var batchRequest = new TigerRequest<ContractsResponse>()
 
 - `PlaceOrder` 返回成功仅表示订单**已提交**，不代表已成交
 - 需通过 `ORDERS` 查询或推送回调确认最终成交状态
-- `FILLED_ORDERS` 需要提供 `StartTime`（建议不超过 90 天范围）
+- `FILLED_ORDERS` 需要提供 `StartDate`（建议不超过 90 天范围）
 - 期权下单需先通过 `OPTION_CHAIN` 获取合约详情（identifier）
 - `TradeClient` 自动根据账户号判断模拟/实盘并路由

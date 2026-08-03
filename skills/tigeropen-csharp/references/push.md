@@ -9,326 +9,219 @@
 using TigerOpenAPI.Config;
 using TigerOpenAPI.Push;
 using TigerOpenAPI.Push.Model;
+using TigerOpenAPI.Quote.Pb;
+using TigerOpenAPI.Common.Enum;
 
-TigerConfig config = new TigerConfig()
+TigerConfig pushConfig = new TigerConfig()
 {
     ConfigFilePath = "path/to/config/",
-    IsSslSocket = true  // 推荐启用 SSL
+    IsSslSocket = true  // 默认已是 true
 };
 
-// PushClient 是单例，使用工厂方法 / Singleton, use factory method
+// PushClient 构造函数是 private，必须用 GetInstance()
+// The PushClient ctor is private — use GetInstance()
 PushClient pushClient = PushClient.GetInstance()
-    .Config(config)
-    .ApiComposeCallback(new MyApiComposeCallback());  // 注册回调实现
+    .Config(pushConfig)
+    .ApiComposeCallback(new MyApiComposeCallback());
 
-pushClient.Connect();
+await pushClient.ConnectAsync();   // 或同步 pushClient.Connect()
 ```
+
+> **关键约定 / Key conventions**
+> - 回调数据类型在两个命名空间：`TigerOpenAPI.Quote.Pb`（`QuoteBasicData`、`AssetData`、
+>   `PositionData`、`OrderStatusData` 等 protobuf 类型）与 `TigerOpenAPI.Push.Model`
+>   （`TradeTick`、`SubscribedSymbol`）
+> - **不存在 `AckModel` 类型**；错误/踢线回调用 `string` / `int` 参数
+> - 订阅方法返回 `uint`（请求 id）；未连接时返回 `0`
+> - There is no `AckModel`; error callbacks take `string`/`int`.
 
 ---
 
 ## 实现回调接口 / Implement Callback Interface
 
-用户需要实现 `IApiComposeCallback` 接口（继承自 `ISubscribeApiCallback`）：
+`IApiComposeCallback` 继承 `ISubscribeApiCallback`，**共 27 个成员**，全部必须实现。
+SDK 自带参考实现 `Sample/DefaultApiComposeCallback.cs`，采用**显式接口实现**写法。
+`IApiComposeCallback` has **27 members**; the SDK's reference impl uses explicit
+interface implementation.
 
 ```csharp
-using TigerOpenAPI.Push;
-using TigerOpenAPI.Push.Model;
-
 public class MyApiComposeCallback : IApiComposeCallback
 {
-    // ===== 连接生命周期 / Connection lifecycle =====
+    // ===== 连接生命周期（IApiComposeCallback 独有的 8 个成员）=====
+    // 这 8 个用显式接口实现写法 / declared explicitly on the interface
 
-    public void ConnectionAck()
+    void IApiComposeCallback.ConnectionAck()
     {
         Console.WriteLine("Connected!");
-        // 在此处执行订阅 / Subscribe here after connection
+        // 首次订阅可放在此处 / place the initial subscribe here
     }
 
-    public void ConnectionClosed()
+    void IApiComposeCallback.ConnectionAck(int serverSendInterval, int serverReceiveInterval)
+    {
+        Console.WriteLine($"Connected. send={serverSendInterval} recv={serverReceiveInterval}");
+    }
+
+    void IApiComposeCallback.ConnectionClosed()
     {
         Console.WriteLine("Disconnected.");
     }
 
-    public void ConnectionKickout(AckModel response)
+    void IApiComposeCallback.ConnectionKickout(int errorCode, string errorMsg)
     {
-        Console.WriteLine($"Kicked out: {response?.Message}");
+        Console.WriteLine($"Kicked out [{errorCode}]: {errorMsg}");
     }
 
-    public void HearBeat()
+    void IApiComposeCallback.HearBeat(string heartBeatContent)
     {
-        // 心跳（可留空）
+        // 注意方法名拼写是 HearBeat（不是 HeartBeat）
     }
 
-    public void ServerHeartBeatTimeOut(string errorMsg)
+    void IApiComposeCallback.ServerHeartBeatTimeOut(string channelId)
     {
-        Console.WriteLine($"Heartbeat timeout: {errorMsg}");
+        Console.WriteLine($"Heartbeat timeout, channel: {channelId}");
     }
 
-    public void Error(AckModel response)
+    void IApiComposeCallback.Error(string errorMsg)
     {
-        Console.WriteLine($"Server error: {response?.Message}");
+        Console.WriteLine($"Error: {errorMsg}");
     }
 
-    // ===== 行情数据回调 / Market data callbacks =====
+    void IApiComposeCallback.Error(int id, int errorCode, string errorMsg)
+    {
+        Console.WriteLine($"Error id={id} code={errorCode}: {errorMsg}");
+    }
+
+    // ===== 行情数据回调（ISubscribeApiCallback，public 实现）=====
 
     public void QuoteChange(QuoteBasicData data)
     {
-        Console.WriteLine($"Quote: {data.Symbol} price={data.LatestPrice} " +
-                          $"volume={data.Volume}");
+        Console.WriteLine($"[行情] {data.Symbol} {data.LatestPrice}");
     }
 
-    public void OptionChange(QuoteBasicData data)
-    {
-        Console.WriteLine($"Option: {data.Symbol} price={data.LatestPrice}");
-    }
+    public void QuoteAskBidChange(QuoteBBOData data) { }
+    public void OptionChange(QuoteBasicData data) { }
+    public void OptionAskBidChange(QuoteBBOData data) { }
+    public void FutureChange(QuoteBasicData data) { }
+    public void FutureAskBidChange(QuoteBBOData data) { }
+    public void DepthQuoteChange(QuoteDepthData data) { }
+    public void KlineChange(KlineData data) { }
+    public void TradeTickChange(TradeTick data) { }        // Push.Model 类型
+    public void FullTickChange(TickData data) { }
+    public void StockTopPush(StockTopData data) { }
+    public void OptionTopPush(OptionTopData data) { }
 
-    public void FutureChange(QuoteBasicData data)
-    {
-        Console.WriteLine($"Future: {data.Symbol} price={data.LatestPrice}");
-    }
+    // ===== 账户数据回调 =====
 
-    public void TradeTickChange(TradeTick data)
+    public void AssetChange(AssetData data)
     {
-        Console.WriteLine($"Tick: {data.Symbol} price={data.Price} vol={data.Volume}");
-    }
-
-    public void FullTickChange(TickData data)
-    {
-        Console.WriteLine($"FullTick: {data.Symbol}");
-    }
-
-    public void KlineChange(KlineData data)
-    {
-        Console.WriteLine($"Kline: {data.Symbol} close={data.Close}");
-    }
-
-    public void DepthQuoteChange(QuoteDepthData data)
-    {
-        Console.WriteLine($"Depth: {data.Symbol}");
-    }
-
-    // ===== 账户数据回调 / Account data callbacks =====
-
-    public void OrderStatusChange(OrderStatusData data)
-    {
-        Console.WriteLine($"Order: id={data.Id} status={data.Status} " +
-                          $"filled={data.FilledQuantity}");
+        Console.WriteLine($"[资产] {data.Account} 净资产={data.NetLiquidation}");
     }
 
     public void PositionChange(PositionData data)
     {
-        Console.WriteLine($"Position: {data.Symbol} qty={data.PositionQty}");
+        Console.WriteLine($"[持仓] {data.Symbol} {data.Position}");
     }
 
-    public void AssetChange(AssetData data)
+    public void OrderStatusChange(OrderStatusData data)
     {
-        Console.WriteLine($"Asset: cash={data.CashBalance} " +
-                          $"net={data.NetLiquidation}");
+        Console.WriteLine($"[订单] {data.Symbol} {data.Status}");
     }
 
-    // ===== 其他回调 / Other callbacks =====
-    public void StockTopPush(object data) { }
-    public void OptionTopPush(object data) { }
+    public void OrderTransactionChange(OrderTransactionData data) { }
+
+    // ===== 订阅结果回调 =====
+
+    public void SubscribeEnd(int id, string subject, string result) { }
+    public void CancelSubscribeEnd(int id, string subject, string result) { }
+    public void GetSubscribedSymbolEnd(SubscribedSymbol subscribedSymbol) { }
 }
 ```
 
----
+### 27 个成员一览 / All 27 Members
 
-## 完整示例 / Full Example
+**`IApiComposeCallback` 独有（8）**：`Error(string)`、`Error(int, int, string)`、
+`ConnectionClosed()`、`ConnectionKickout(int, string)`、`ConnectionAck()`、
+`ConnectionAck(int, int)`、`HearBeat(string)`、`ServerHeartBeatTimeOut(string)`
 
-```csharp
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using TigerOpenAPI.Config;
-using TigerOpenAPI.Push;
-using TigerOpenAPI.Push.Enum;
-
-class Program
-{
-    static void Main(string[] args)
-    {
-        TigerConfig config = new TigerConfig()
-        {
-            ConfigFilePath = "path/to/config/",
-        };
-
-        string account = config.DefaultAccount;
-
-        // 1. 创建回调实例（在 ConnectionAck 中执行订阅）
-        var callback = new DefaultApiComposeCallback(account);
-
-        // 2. 配置并连接 / Configure and connect
-        PushClient client = PushClient.GetInstance()
-            .Config(config)
-            .ApiComposeCallback(callback);
-        client.Connect();
-
-        // 3. 等待信号 / Wait for Ctrl+C
-        Console.CancelKeyPress += (s, e) => { e.Cancel = true; };
-        Thread.Sleep(Timeout.Infinite);
-
-        // 4. 断开连接 / Disconnect
-        client.Disconnect();
-    }
-}
-
-// 在 ConnectionAck 中执行订阅
-class DefaultApiComposeCallback : MyApiComposeCallback
-{
-    private readonly string _account;
-    private PushClient _client;
-
-    public DefaultApiComposeCallback(string account)
-    {
-        _account = account;
-        _client = PushClient.GetInstance();
-    }
-
-    public override void ConnectionAck()
-    {
-        Console.WriteLine("Connected! Subscribing...");
-        // 行情订阅 / Quote subscriptions
-        _client.SubscribeQuote(new HashSet<string> { "AAPL", "TSLA" });
-
-        // 账户订阅 / Account subscriptions
-        _client.Subscribe(Subject.Asset);
-        _client.Subscribe(Subject.Order);
-        _client.Subscribe(Subject.Position);
-    }
-}
-```
+**继承自 `ISubscribeApiCallback`（19）**：`OrderStatusChange`、`OrderTransactionChange`、
+`PositionChange`、`AssetChange`、`TradeTickChange`、`FullTickChange`、`QuoteChange`、
+`QuoteAskBidChange`、`OptionChange`、`OptionAskBidChange`、`FutureChange`、
+`FutureAskBidChange`、`DepthQuoteChange`、`KlineChange`、`StockTopPush`、
+`OptionTopPush`、`SubscribeEnd`、`CancelSubscribeEnd`、`GetSubscribedSymbolEnd`
 
 ---
 
 ## 订阅方法 / Subscribe Methods
 
-### 行情订阅 / Quote Subscription
+所有订阅/退订方法返回 `uint`（请求 id）；未连接时返回 `0`。
+All subscribe/unsubscribe methods return a `uint` request id, or `0` if not connected.
 
 ```csharp
-// 股票行情 / Stock quotes
-pushClient.SubscribeQuote(new HashSet<string> { "AAPL", "TSLA", "00700" });
-pushClient.CancelSubscribeQuote();           // 取消所有行情订阅
-
-// 深度行情 / Quote depth
-pushClient.SubscribeDepthQuote(new HashSet<string> { "AAPL" });
-pushClient.CancelSubscribeDepthQuote();
-
-// K 线 / Kline
-pushClient.SubscribeKline(new HashSet<string> { "AAPL" });
-pushClient.CancelSubscribeKline();
-
-// 逐笔成交 / Trade tick
-pushClient.SubscribeTradeTick(new HashSet<string> { "AAPL" });
-pushClient.CancelSubscribeTradeTick();
-
-// 期权行情 / Option quotes
-pushClient.SubscribeOption(new HashSet<string> { "AAPL  250829C00150000" });
-pushClient.CancelSubscribeOption();
-
-// 期货行情 / Future quotes
-pushClient.SubscribeFuture(new HashSet<string> { "CL2509" });
-pushClient.CancelSubscribeFuture();
-```
-
-### 账户推送 / Account Push
-
-```csharp
-using TigerOpenAPI.Push.Enum;
-
-// 资产变动 / Asset changes
+// 账户类：用 Subject 枚举 / Account-family: use the Subject enum
 pushClient.Subscribe(Subject.Asset);
+pushClient.Subscribe(Subject.Position);
+pushClient.Subscribe(Subject.OrderStatus);
+pushClient.Subscribe(Subject.OrderTransaction);
+pushClient.Subscribe(Subject.Asset, "your_account");   // 指定账户
 pushClient.CancelSubscribe(Subject.Asset);
 
-// 订单状态 / Order status
-pushClient.Subscribe(Subject.Order);
-pushClient.CancelSubscribe(Subject.Order);
+// 行情类：接收 ISet<string> / Quote-family: take an ISet<string>
+pushClient.SubscribeQuote(new HashSet<string> { "AAPL", "TSLA" });
+pushClient.CancelSubscribeQuote(new HashSet<string> { "TSLA" });
+pushClient.CancelSubscribeQuote();   // 省略参数 = 全部退订
 
-// 持仓变动 / Position changes
-pushClient.Subscribe(Subject.Position);
-pushClient.CancelSubscribe(Subject.Position);
+pushClient.SubscribeTradeTick(new HashSet<string> { "AAPL" });
+pushClient.SubscribeDepthQuote(new HashSet<string> { "AAPL" });
+pushClient.SubscribeKline(new HashSet<string> { "AAPL" });
+pushClient.SubscribeOption(new HashSet<string> { "AAPL  260821C00150000" });
+pushClient.SubscribeFuture(new HashSet<string> { "CLmain" });
+
+// 榜单与全市场 / Ranking lists and whole-market
+pushClient.SubscribeStockTop(Market.US);
+pushClient.SubscribeOptionTop(Market.US);
+pushClient.SubscribeMarketQuote(Market.US, QuoteSubject.Quote);
+
+// 查询已订阅标的 / Query current subscriptions
+pushClient.GetSubscribedSymbols();
+
+// 连接状态与断开 / State and disconnect
+bool connected = pushClient.IsConnected();
+string url = pushClient.GetUrl();
+pushClient.Disconnect();
 ```
 
----
+> **没有** `SubscribeOrder()` 方法，也**没有** C# 事件（`OrderAssetChange += ...`）
+> 或 `PushClientFactory`。账户推送用 `Subscribe(Subject.OrderStatus)`。
+> There is no `SubscribeOrder()`, no events, and no `PushClientFactory`.
 
-## 推送数据字段 / Push Data Fields
-
-### QuoteBasicData（股票/期权/期货行情）
-
-| 字段 Field | 类型 | 说明 |
-|-----------|------|------|
-| `Symbol` | string | 标的代码 |
-| `LatestPrice` | double | 最新价 |
-| `Volume` | long | 成交量 |
-| `BidPrice` | double | 买一价 |
-| `AskPrice` | double | 卖一价 |
-| `Change` | double | 涨跌额 |
-| `ChangeRatio` | double | 涨跌幅 |
-| `Timestamp` | long | 时间戳（毫秒） |
-
-### AssetData（资产）
-
-| 字段 Field | 类型 | 说明 |
-|-----------|------|------|
-| `Account` | string | 账户号 |
-| `NetLiquidation` | double | 净资产 |
-| `CashBalance` | double | 现金余额 |
-| `BuyingPower` | double | 购买力 |
-| `AvailableFunds` | double | 可用资金 |
-
-### OrderStatusData（订单）
-
-| 字段 Field | 类型 | 说明 |
-|-----------|------|------|
-| `Id` | long | 订单 ID |
-| `Symbol` | string | 标的代码 |
-| `Status` | string | 订单状态 |
-| `AvgFillPrice` | double | 平均成交价 |
-| `FilledQuantity` | int | 已成交数量 |
-| `TotalQuantity` | int | 总数量 |
-
-### PositionData（持仓）
-
-| 字段 Field | 类型 | 说明 |
-|-----------|------|------|
-| `Account` | string | 账户号 |
-| `Symbol` | string | 标的代码 |
-| `PositionQty` | int | 持仓数量 |
-| `AverageCost` | double | 平均成本 |
-| `MarketPrice` | double | 最新价格 |
-| `MarketValue` | double | 市值 |
-| `UnrealizedPnl` | double | 浮动盈亏 |
+`Subject` 枚举：`None`、`Asset`、`Position`、`OrderStatus`、`OrderTransaction`。
+`QuoteSubject` 枚举：`None`、`Quote`、`Option`、`Future`、`QuoteDepth`、`TradeTick`、
+`StockTop`、`OptionTop`、`Kline`。
 
 ---
 
-## IApiComposeCallback 方法速查 / Interface Methods
+## 数据字段 / Data Fields
 
-| 方法 Method | 触发时机 | 参数类型 |
-|------------|---------|---------|
-| `ConnectionAck()` | 连接成功时（在此订阅） | — |
-| `ConnectionClosed()` | 连接断开时 | — |
-| `ConnectionKickout()` | 被踢出时 | `AckModel` |
-| `HearBeat()` | 心跳 | — |
-| `ServerHeartBeatTimeOut()` | 心跳超时 | `string` |
-| `Error()` | 服务端错误 | `AckModel` |
-| `QuoteChange()` | 股票行情更新 | `QuoteBasicData` |
-| `OptionChange()` | 期权行情更新 | `QuoteBasicData` |
-| `FutureChange()` | 期货行情更新 | `QuoteBasicData` |
-| `TradeTickChange()` | 逐笔成交（简化） | `TradeTick` |
-| `FullTickChange()` | 逐笔成交（完整） | `TickData` |
-| `KlineChange()` | K 线更新 | `KlineData` |
-| `DepthQuoteChange()` | 深度行情更新 | `QuoteDepthData` |
-| `OrderStatusChange()` | 订单状态变化 | `OrderStatusData` |
-| `PositionChange()` | 持仓变动 | `PositionData` |
-| `AssetChange()` | 账户资产变动 | `AssetData` |
+`AssetData`（`TigerOpenAPI.Quote.Pb`）：`Account`、`Currency`、`SegType`、
+`NetLiquidation`、`CashBalance`、`BuyingPower`、`AvailableFunds`、`ExcessLiquidity`、
+`EquityWithLoan`、`GrossPositionValue`、`InitMarginReq`、`MaintMarginReq`、`Timestamp`
+
+`PositionData`：`Account`、`Symbol`、`Position`、`PositionScale`、`AverageCost`、
+`LatestPrice`、`MarketValue`、`Expiry`、`Strike`、`Right`、`Identifier`、`Multiplier`
+
+`OrderStatusData`：`Id`、`Account`、`Symbol`、`Action`、`OrderType`、`Status`、
+`TotalQuantity`、`FilledQuantity`、`AvgFillPrice`、`LimitPrice`、`StopPrice`、`RealizedPnl`
 
 ---
 
 ## 注意事项 / Notes
 
-- **在 `ConnectionAck()` 回调中执行订阅**，连接成功后才能订阅
-- `Connect()` 是非阻塞的，连接成功后触发 `ConnectionAck`
-- SDK 不自动重连；若需重连，在 `ConnectionClosed()` 中自行调用 `Connect()`
-- 账户推送使用 `Subject` 枚举（`Subject.Asset/Order/Position`），不需要传账户号
-- 行情订阅使用 `ISet<string>` 传入标的代码集合
-- 多次调用 `GetInstance()` 返回同一个单例对象
+- `PushClient` 是单例，构造函数私有，必须 `PushClient.GetInstance()`
+- `IApiComposeCallback` 共 27 个成员，全部必须实现（可空实现）
+- **不存在 `AckModel`**；`Error` / `ConnectionKickout` 用 `string` / `int` 参数
+- 方法名拼写是 `HearBeat`（不是 `HeartBeat`）
+- 回调数据类型分布在 `TigerOpenAPI.Quote.Pb` 与 `TigerOpenAPI.Push.Model` 两个命名空间
+- 行情订阅接收 `ISet<string>`（如 `HashSet<string>`），不是 `List<string>`
+- 账户订阅用 `Subscribe(Subject.Xxx)`，没有 `SubscribeOrder()` 之类的专用方法
+- 订阅方法在未连接时返回 `0` 且只记录日志，不抛异常
+- 同一进程只有一个 `PushClient` 实例（单例）

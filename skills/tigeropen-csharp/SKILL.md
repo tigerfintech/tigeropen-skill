@@ -64,7 +64,7 @@ var response = await quoteClient.ExecuteAsync(request);
 
 // 3. 查询订单 / Query orders
 TradeClient tradeClient = new TradeClient(config);
-var orderRequest = new TigerRequest<OrderResponse>()
+var orderRequest = new TigerRequest<OrderBatchResponse>()
 {
     ApiMethodName = TradeApiService.ORDERS,
     ModelValue = new QueryOrderModel() { Account = config.DefaultAccount }

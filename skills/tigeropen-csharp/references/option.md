@@ -6,27 +6,30 @@
 
 ## 期权操作工作流 / Option Workflow
 
-当用户提到期权时，按以下流程操作 / When user mentions options, follow this workflow:
-
-### 查询期权 / Query Options
-
-1. **查到期日 Get expirations**: `QuoteApiService.OPTION_EXPIRATION` → 获取可选到期日列表
-2. **查期权链 Get chain**: `QuoteApiService.OPTION_CHAIN` → 获取指定到期日的所有合约
-3. **查行情 Get quotes**: `QuoteApiService.OPTION_BRIEF` → 获取期权实时行情和 Greeks
+1. **查到期日 Get expirations**: `QuoteApiService.OPTION_EXPIRATION` + `OptionExpirationModel`
+2. **查期权链 Get chain**: `QuoteApiService.OPTION_CHAIN` + `OptionChainV3Model`
+3. **查行情 Get quotes**: `QuoteApiService.OPTION_BRIEF` + `OptionBasicModel`
 
 ### 港股期权特殊处理 / HK Option Special Handling
 
-- 港股期权标的代码不同于正股 / HK option underlyings differ from stock codes: `00700` → `TCH`（腾讯）
-- 使用 `QuoteApiService.OPTION_SYMBOL` 查询港股期权代码映射
+- 港股期权标的代码不同于正股：`00700` → `TCH`（腾讯）
+- 用 `QuoteApiService.ALL_HK_OPTION_SYMBOLS` 查询港股期权代码映射
 
 ---
 
 ## 初始化 / Initialize
 
 ```csharp
+using TigerOpenAPI.Common.Enum;
+using TigerOpenAPI.Common.Util;
 using TigerOpenAPI.Config;
+using TigerOpenAPI.Model;
 using TigerOpenAPI.Quote;
+using TigerOpenAPI.Quote.Model;
+using TigerOpenAPI.Quote.Response;
 using TigerOpenAPI.Trade;
+using TigerOpenAPI.Trade.Model;
+using TigerOpenAPI.Trade.Response;
 
 TigerConfig config = new TigerConfig()
 {
@@ -36,32 +39,29 @@ QuoteClient quoteClient = new QuoteClient(config);
 TradeClient tradeClient = new TradeClient(config);
 ```
 
+> **关键约定 / Key conventions**
+> - `Market` 是 `Market` 枚举（`Market.US`），不是字符串
+> - **`Expiry` 是 `long` 毫秒时间戳**，用 `DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)` 转换
+> - `Strike` / `Right` 是 `string`
+> - 筛选条件用 `OptionChainFilterModel` + `Range<Double>`，不是扁平的 `XxxMin`/`XxxMax` 字段
+> - `Expiry` is a `long` ms timestamp; filters go through `OptionChainFilterModel`.
+
 ---
 
 ## 期权到期日 / Option Expirations
 
 ```csharp
-using TigerOpenAPI.Quote.Model;
-using TigerOpenAPI.Quote.Response;
-
-var request = new TigerRequest<OptionExpirationResponse>()
+var expirationRequest = new TigerRequest<OptionExpirationResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_EXPIRATION,
     ModelValue = new OptionExpirationModel()
     {
         Symbols = new List<string> { "AAPL" },
-        Market = "US"   // US / HK
+        Market = Market.US        // 枚举
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// response.OptionExpirationItems 为列表
-// OptionExpirationItem 字段 / Fields:
-// Symbol     - 股票代码
-// Count      - 到期日数量
-// Dates      - 到期日数组 (e.g. "2024-06-28")
-// Timestamps - 到期日时间戳数组（毫秒，纽约时间）
-// PeriodTags - 周期标签: "m"=月期权, "w"=周期权, "q"=季度
+OptionExpirationResponse expirations = await quoteClient.ExecuteAsync(expirationRequest);
+// Data 是 List<OptionExpirationItem>
 ```
 
 ---
@@ -69,486 +69,357 @@ var response = await quoteClient.ExecuteAsync(request);
 ## 期权链 / Option Chain
 
 ```csharp
-using TigerOpenAPI.Quote.Model;
-using TigerOpenAPI.Quote.Response;
-
-var request = new TigerRequest<OptionChainResponse>()
+var chainRequest = new TigerRequest<OptionChainResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_CHAIN,
-    ModelValue = new OptionChainModel()
+    ModelValue = new OptionChainV3Model()
     {
-        Symbol = "AAPL",
-        Expiry = "2025-08-29",
-        Market = "US",
-        ReturnGreekValue = true,   // 返回希腊字母 / Return Greeks
-        // 可选筛选 / Optional filters:
-        InTheMoney = true,
-        ImpliedVolatilityMin = 0.15,
-        ImpliedVolatilityMax = 0.80,
-        DeltaMin = 0.2,
-        DeltaMax = 0.8,
-        OpenInterestMin = 100
+        Market = Market.US,
+        ReturnGreekValue = true,
+        OptionBasic = new List<OptionChainModel>()
+        {
+            new OptionChainModel()
+            {
+                Symbol = "AAPL",
+                // Expiry 是 long 毫秒时间戳
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)
+            }
+        },
+        OptionFilter = new OptionChainFilterModel()
+        {
+            InTheMoney = true,
+            ImpliedVolatility = new Range<Double>() { Min = 0.15, Max = 0.8 },
+            Greeks = new Greeks()
+            {
+                Delta = new Range<Double>() { Min = 0.2, Max = 0.8 }
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionChainItem 字段 / Fields:
-// Symbol      - 标的代码
-// Expiry      - 到期日（毫秒）
-// Items       - List<OptionRealTimeQuoteGroup>
-//   .Call     - 看涨期权 OptionRealTimeQuote
-//   .Put      - 看跌期权 OptionRealTimeQuote
-//
-// OptionRealTimeQuote 字段 / Fields:
-// Identifier  - 期权完整代码
-// Strike      - 行权价
-// Right       - CALL / PUT
-// AskPrice/BidPrice/LatestPrice
-// Volume/OpenInterest
-// ImpliedVol  - 隐含波动率
-// Delta/Gamma/Theta/Vega/Rho
+OptionChainResponse chain = await quoteClient.ExecuteAsync(chainRequest);
+// Data 是 List<OptionChainItem>
 ```
+
+> 模型是 `OptionChainV3Model`；`Market` / `ReturnGreekValue` / `OptionFilter` 在
+> **外层模型**上，`OptionChainModel` 只有 `Symbol` 与 `Expiry` 两个字段。
+> 筛选用 `OptionChainFilterModel` + `Range<Double>` / `Greeks`，**没有**
+> `ImpliedVolatilityMin` / `DeltaMax` / `OpenInterestMin` 这类扁平字段。
 
 ---
 
 ## 港股期权代码映射 / HK Option Symbol Mapping
 
 ```csharp
-var request = new TigerRequest<OptionSymbolResponse>()
+var symbolRequest = new TigerRequest<OptionSymbolResponse>()
 {
-    ApiMethodName = QuoteApiService.OPTION_SYMBOL,
-    ModelValue = new OptionSymbolModel()
+    ApiMethodName = QuoteApiService.ALL_HK_OPTION_SYMBOLS,
+    ModelValue = new OptionModel()
     {
-        Market = "HK",
-        Lang = "en_US"   // en_US / zh_CN / zh_TW
+        Market = Market.HK,
+        Lang = Language.en_US
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// response.SymbolItems 列表
-// OptionSymbolItem 字段 / Fields:
-// Symbol           - 期权 symbol (e.g. "TCH.HK")
-// Name             - 标的名称
-// UnderlyingSymbol - 正股代码 (e.g. "00700")
-
-// 然后使用映射后的代码查询港股期权 / Then use mapped symbol for HK queries
+OptionSymbolResponse optSymbols = await quoteClient.ExecuteAsync(symbolRequest);
+// Data 是 List<OptionSymbolItem>
 ```
+
+> 常量是 `ALL_HK_OPTION_SYMBOLS`（**不是** `OPTION_SYMBOL`），
+> 模型是基类 `OptionModel`（**没有** `OptionSymbolModel`）。
 
 ---
 
-## 期权实时行情 / Option Brief (Real-time Quotes)
+## 期权实时行情 / Option Brief
 
 ```csharp
-using TigerOpenAPI.Quote.Model;
-using TigerOpenAPI.Quote.Response;
-
-var models = new List<OptionCommonModel>()
-{
-    new OptionCommonModel()
-    {
-        Symbol = "AAPL",
-        Right = "CALL",
-        Expiry = "2025-08-29",   // yyyy-MM-dd
-        Strike = "150.0"          // 小数位须和期权链一致
-    }
-};
-
-var request = new TigerRequest<OptionBriefResponse>()
+var briefRequest = new TigerRequest<OptionBriefResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_BRIEF,
-    ModelValue = new OptionBriefModel()
+    ModelValue = new OptionBasicModel()
     {
-        OptionBasic = models,
-        Market = "US"
+        Market = Market.US,
+        OptionBasic = new List<OptionCommonModel>()
+        {
+            new OptionCommonModel()
+            {
+                Symbol = "AAPL",
+                Right = "CALL",
+                Strike = "150.0",
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionBriefItem 字段 / Fields:
-// Identifier    - 期权完整代码
-// Symbol        - 标的代码
-// BidPrice/AskPrice/LatestPrice
-// Volume/OpenInterest
-// High/Low/Open/PreClose
-// Change        - 涨跌额
-// MidPrice      - 中间价
-// MarkPrice     - 标记价格
-// SellingReturn - 卖出年化收益率
+OptionBriefResponse optBriefs = await quoteClient.ExecuteAsync(briefRequest);
+// Data 是 List<OptionBriefItem>
 ```
+
+> 模型是 `OptionBasicModel`（**没有** `OptionBriefModel`）。
+> 传入非 `OptionBasicModel` 的模型时，SDK 会自动把 `ApiVersion` 降到 `"1.0"`。
 
 ---
 
-## 期权深度行情 / Option Depth Quotes
+## 期权深度行情 / Option Depth
 
 ```csharp
-var models = new List<OptionCommonModel>()
-{
-    new OptionCommonModel()
-    {
-        Symbol = "AAPL",
-        Right = "PUT",
-        Expiry = "2024-06-28",
-        Strike = "210.0"
-    }
-};
-
-var request = new TigerRequest<OptionDepthResponse>()
+var depthRequest = new TigerRequest<OptionDepthResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_DEPTH,
-    ModelValue = new OptionDepthModel()
+    ModelValue = new OptionBasicModel()
     {
-        OptionBasic = models,
-        Market = "US"
+        Market = Market.US,
+        OptionBasic = new List<OptionCommonModel>()
+        {
+            new OptionCommonModel()
+            {
+                Symbol = "AAPL",
+                Right = "PUT",
+                Strike = "210.0",
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionDepthItem 字段 / Fields:
-// Ask/Bid - List<OptionDepthOrderBook>
-//   Price   - 委托价
-//   Volume  - 委托量
-//   Code    - 交易所代码 (CBOE, PHLX 等)
+OptionDepthResponse optDepth = await quoteClient.ExecuteAsync(depthRequest);
 ```
+
+> 深度行情与 Brief 共用 `OptionBasicModel`（**没有** `OptionDepthModel`）。
 
 ---
 
 ## 期权逐笔成交 / Option Trade Ticks
 
 ```csharp
-// 仅支持美股期权 / US market only
-
-var models = new List<OptionCommonModel>()
-{
-    new OptionCommonModel()
-    {
-        Symbol = "AAPL",
-        Right = "PUT",
-        Expiry = "2024-03-08",
-        Strike = "185.0"
-    }
-};
-
-var request = new TigerRequest<OptionTradeTickResponse>()
+// 逐笔用批量模型 BatchApiModel<OptionCommonModel>
+var tickRequest = new TigerRequest<OptionTradeTickResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_TRADE_TICK,
-    ModelValue = new OptionTradeTickModel()
+    ModelValue = new BatchApiModel<OptionCommonModel>()
     {
-        OptionBasic = models
+        Items = new List<OptionCommonModel>()
+        {
+            new OptionCommonModel()
+            {
+                Symbol = "AAPL",
+                Right = "PUT",
+                Strike = "185.0",
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionTradeTickItem 字段 / Fields:
-// Items - List<TradeTickPoint>
-//   Price  - 成交价
-//   Volume - 成交量
-//   Time   - 成交时间（毫秒）
+OptionTradeTickResponse optTicks = await quoteClient.ExecuteAsync(tickRequest);
 ```
+
+> 逐笔成交用 `BatchApiModel<OptionCommonModel>`（字段名 `Items`），
+> **没有** `OptionTradeTickModel`。
 
 ---
 
-## 期权K线 / Option K-line
+## 期权 K 线 / Option K-line
 
 ```csharp
-using TigerOpenAPI.Quote.Model;
-using TigerOpenAPI.Quote.Response;
-
-var klineModels = new List<OptionKlineModel>()
-{
-    new OptionKlineModel()
-    {
-        Symbol = "AAPL",
-        Right = "CALL",
-        Expiry = "2024-06-28",
-        Strike = "170.0",
-        BeginTime = "2024-06-26",
-        EndTime = "2024-06-26 23:59:59",
-        Period = "1min",     // day/1min/5min/30min/60min
-        Limit = 10,
-        SortDir = "DESC"
-    }
-};
-
-var request = new TigerRequest<OptionKlineResponse>()
+var klineRequest = new TigerRequest<OptionKlineResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_KLINE,
-    ModelValue = new OptionKlineQueryModel()
+    ModelValue = new OptionKlineV2Model()
     {
-        OptionQuery = klineModels,
-        Market = "US"
+        Market = Market.US,
+        OptionQuery = new List<OptionKlineModel>()
+        {
+            new OptionKlineModel()
+            {
+                Symbol = "AAPL",
+                Right = "CALL",
+                Strike = "170.0",
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE),
+                BeginTime = DateUtil.ConvertTimestamp("2026-06-01", CustomTimeZone.NY_ZONE),
+                EndTime = DateUtil.ConvertTimestamp("2026-06-15", CustomTimeZone.NY_ZONE),
+                Period = OptionKType.day.Value,
+                Limit = 10,
+                SortDir = SortDir.SortDir_Descend
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionKlineItem 字段 / Fields:
-// Items - List<OptionKlinePoint>
-//   Open/High/Low/Close - 开高低收
-//   Volume              - 成交量
-//   Time                - 时间戳（毫秒）
-//   OpenInterest        - 持仓量（仅日K线）
+OptionKlineResponse optKlines = await quoteClient.ExecuteAsync(klineRequest);
 ```
 
----
-
-## 期权分时数据 / Option Timeline
-
-```csharp
-// 目前仅支持港股期权 / HK market only currently
-
-var models = new List<OptionTimelineModel>()
-{
-    new OptionTimelineModel()
-    {
-        Symbol = "ALB.HK",
-        Right = "CALL",
-        Expiry = 1753878054000L,    // 毫秒时间戳
-        Strike = "117.50"
-    }
-};
-
-var request = new TigerRequest<OptionTimelineResponse>()
-{
-    ApiMethodName = QuoteApiService.OPTION_TIMELINE,
-    ModelValue = new OptionTimelineQueryModel()
-    {
-        OptionTimelineModels = models,
-        Market = "HK"
-    }
-};
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionTimelineItem 字段 / Fields:
-// PreClose  - 昨日收盘价
-// Minutes   - List<OptionTimelinePoint>
-//   Price     - 最新价
-//   AvgPrice  - 均价
-//   Volume    - 成交量
-//   Time      - 时间戳（毫秒）
-```
+> 模型是 `OptionKlineV2Model`，合约列表字段名是 `OptionQuery`，
+> 元素类型是 `OptionKlineModel`（继承 `OptionCommonModel`，所以有
+> `Symbol`/`Right`/`Strike`/`Expiry`）。
+> `BeginTime`/`EndTime` 是 `Int64` 毫秒；`SortDir` 是 `SortDir` 枚举
+> （`SortDir_No` / `SortDir_Ascend` / `SortDir_Descend`）。
+> 传入非 `OptionKlineV2Model` 的模型时，SDK 会把 `ApiVersion` 降到 `"1.0"`。
 
 ---
 
 ## 期权分析 / Option Analysis
 
 ```csharp
-using TigerOpenAPI.Quote.Model;
-using TigerOpenAPI.Quote.Response;
-
-var items = new List<OptionAnalysisModel>()
-{
-    new OptionAnalysisModel()
-    {
-        Symbol = "AAPL",
-        Period = "52week"    // 3year/52week/26week/13week
-    },
-    new OptionAnalysisModel()
-    {
-        Symbol = "TSLA",
-        Period = "52week",
-        RequireVolatilityList = true   // 返回IV/HV历史时序
-    }
-};
-
-var request = new TigerRequest<OptionAnalysisResponse>()
+var analysisRequest = new TigerRequest<OptionAnalysisResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_ANALYSIS,
-    ModelValue = new OptionAnalysisQueryModel()
+    ModelValue = new OptionAnalysisModel()
     {
-        Symbols = items,
-        Market = "US"
+        Market = Market.US,
+        // Symbols 是 List<OptionAnalysisSymbolModel>，不是 List<string>
+        Symbols = new List<OptionAnalysisSymbolModel>()
+        {
+            new OptionAnalysisSymbolModel()
+            {
+                Symbol = "AAPL",
+                Period = "52week",              // 3year/52week/26week/13week
+                RequireVolatilityList = true
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
-
-// OptionAnalysisItem 字段 / Fields:
-// Symbol           - 标的代码
-// ImpliedVol30Days - 30日隐含波动率
-// HisVolatility    - 历史波动率（30天）
-// IvHisVRatio      - IV/HV 比率
-// CallPutRatio     - Call/Put 比率
-// ImpliedVolMetric - ImpliedVolMetric 对象
-//   Percentile   - IV百分位（0%-100%）
-//   Rank         - IV排名（0-1）
-//   Period       - 分析周期
-// VolatilityList  - List<VolatilityItem> (requireVolatilityList=true)
+OptionAnalysisResponse analysis = await quoteClient.ExecuteAsync(analysisRequest);
 ```
+
+> `OptionAnalysisModel` 只有 `Symbols` 与继承来的 `Market`；`Period` 与
+> `RequireVolatilityList` 在**每个** `OptionAnalysisSymbolModel` 上。
+> 该接口在 SDK 示例中未被调用过，字段以源码为准。
 
 ---
 
-## 期权指标计算 / Option Indicator Calculation
+## 期权分时 / Option Timeline
 
-```csharp
-// 查询单个期权的盘中实时指标（Greeks、IV、杠杆等）
-using TigerOpenAPI.Quote.Model;
-using TigerOpenAPI.Quote.Response;
-
-var request = new TigerRequest<OptionFundamentalsResponse>()
-{
-    ApiMethodName = QuoteApiService.OPTION_INDICATOR,
-    ModelValue = new OptionFundamentalsModel()
-    {
-        Symbol = "BABA",
-        Right = "CALL",
-        Strike = "205.0",
-        Expiry = "2019-11-01"   // yyyy-MM-dd
-    }
-};
-var response = await quoteClient.ExecuteAsync(request);
-
-// 返回字段 / Response fields:
-// Delta/Gamma/Theta/Vega/Rho - 希腊字母
-// InsideValue       - 内在价值
-// TimeValue         - 时间价值
-// Leverage          - 杠杆率
-// OpenInterest      - 未平仓量
-// HistoryVolatility - 历史波动率（百分比，如24.38表示24.38%）
-// Volatility        - 隐含波动率（百分比）
-// PremiumRate       - 溢价率（百分比）
-// ProfitRate        - 买入盈利率（百分比）
-```
+`QuoteApiService.OPTION_TIMELINE` 常量存在，但 SDK **尚未提供**对应的请求模型与响应类型。
+需要时用通用响应 `TigerListResponse` + 自行构造模型，或直接走 HTTP。
+The `OPTION_TIMELINE` constant exists but the SDK ships no model/response for it.
 
 ---
 
 ## 单腿期权下单 / Single-leg Option Order
 
 ```csharp
-using TigerOpenAPI.Trade.Model;
-using TigerOpenAPI.Trade.Response;
+// 用 ContractItem 工厂方法构造期权合约
+ContractItem optContract = ContractItem.BuildOptionContract("AAPL", "20260821", 150.0, "CALL");
+// 也可用 identifier: ContractItem.BuildOptionContract("AAPL  260821C00150000")
 
-// 买入看涨期权 / Buy call option
-var request = new TigerRequest<PlaceOrderResponse>()
+PlaceOrderModel optOrder = PlaceOrderModel.BuildLimitOrder(
+    config.DefaultAccount, optContract, ActionType.BUY, 1L, 5.0);
+
+var placeRequest = new TigerRequest<PlaceOrderResponse>()
 {
     ApiMethodName = TradeApiService.PLACE_ORDER,
-    ModelValue = new PlaceOrderModel()
-    {
-        Account = "123456",
-        Symbol = "AAPL",
-        SecType = "OPT",
-        Expiry = "20250829",     // YYYYMMDD
-        Strike = 150.0,
-        Right = "CALL",
-        Currency = "USD",
-        Action = "BUY",
-        OrderType = "LMT",
-        LimitPrice = 5.0,
-        Quantity = 1             // 1张 = 100股
-    }
+    ModelValue = optOrder
 };
-var response = await tradeClient.ExecuteAsync(request);
+PlaceOrderResponse placed = await tradeClient.ExecuteAsync(placeRequest);
 ```
+
+> 合约类型是 `ContractItem`（**没有** `Contract` 类），
+> 用 `ContractItem.BuildOptionContract(...)` 构造。
 
 ---
 
 ## 多腿组合策略 / Multi-leg Combo Strategies
 
-```csharp
-using TigerOpenAPI.Trade.Model;
-using TigerOpenAPI.Trade.Response;
+组合单用 `PlaceOrderModel.BuildMultiLegOrder` + `TradeApiService.PLACE_ORDER`。
+**没有** `PLACE_COMBO_ORDER` 常量。
+Combo orders use `BuildMultiLegOrder` + `PLACE_ORDER`; there is no `PLACE_COMBO_ORDER`.
 
-// 牛市看涨价差 / Bull Call Spread (VERTICAL)
+```csharp
 var legs = new List<ContractLeg>()
 {
-    new ContractLeg()
-    {
-        Symbol = "AAPL",
-        SecType = "OPT",
-        Expiry = "20250829",
-        Strike = 145.0,
-        Right = "CALL",
-        Action = "BUY",
-        Ratio = 1
-    },
-    new ContractLeg()
-    {
-        Symbol = "AAPL",
-        SecType = "OPT",
-        Expiry = "20250829",
-        Strike = 155.0,
-        Right = "CALL",
-        Action = "SELL",
-        Ratio = 1
-    }
+    new ContractLeg() { Symbol = "AAPL", SecType = "OPT", Action = "BUY", Ratio = 1,
+                        Expiry = "20260821", Strike = "145.0", Right = "CALL" },
+    new ContractLeg() { Symbol = "AAPL", SecType = "OPT", Action = "SELL", Ratio = 1,
+                        Expiry = "20260821", Strike = "155.0", Right = "CALL" }
 };
 
-var request = new TigerRequest<PlaceOrderResponse>()
+// BuildMultiLegOrder(account, legs, comboType, action, quantity, orderType,
+//                    limitPrice, auxPrice, trailingPercent, totalQuantityScale = 0)
+PlaceOrderModel comboOrder = PlaceOrderModel.BuildMultiLegOrder(
+    config.DefaultAccount, legs, ComboType.VERTICAL, ActionType.BUY, 1,
+    OrderType.LMT, 3.0, null, null);
+
+var comboRequest = new TigerRequest<PlaceOrderResponse>()
 {
-    ApiMethodName = TradeApiService.PLACE_COMBO_ORDER,
-    ModelValue = new PlaceComboOrderModel()
-    {
-        Account = "123456",
-        ComboType = "VERTICAL",
-        Action = "BUY",
-        OrderType = "LMT",
-        LimitPrice = 3.0,
-        Quantity = 1,
-        Legs = legs
-    }
+    ApiMethodName = TradeApiService.PLACE_ORDER,
+    ModelValue = comboOrder
 };
-var response = await tradeClient.ExecuteAsync(request);
+PlaceOrderResponse comboPlaced = await tradeClient.ExecuteAsync(comboRequest);
 ```
 
-### 其他常用策略示例 / Other Common Strategy Examples
+### 组合策略类型 / Combo Strategy Types
+
+`ComboType` 枚举值对应下表策略 / `ComboType` enum values:
+
+| ComboType | 策略 Strategy | 说明 |
+|-----------|--------------|------|
+| `VERTICAL` | 垂直价差 | 同到期日不同行权价 |
+| `STRADDLE` | 跨式 | 同行权价同到期日 Call+Put |
+| `STRANGLE` | 宽跨式 | 不同行权价同到期日 |
+| `CALENDAR` | 日历价差 | 同行权价不同到期日 |
+| `DIAGONAL` | 对角线价差 | 不同行权价不同到期日 |
+| `COVERED` | 备兑 | 持有股票+卖 Call |
+| `PROTECTIVE` | 保护性 | 持有股票+买 Put |
+| `SYNTHETIC` | 合成 | 合成多/空头 |
+| `CUSTOM` | 自定义 | 4 条腿组合（Iron Condor 等） |
+
+---
+
+## 期权行权 / Option Exercise
+
+这是 SDK 中**唯一**封装成便捷方法的一组接口（内部自行构造请求并 `ExecuteAsync`）。
+These are the only convenience wrappers in the SDK.
 
 ```csharp
-// 跨式策略 / Straddle — 同行权价 Call+Put，BUY
-// ComboType = "STRADDLE"
+// type: "Exercise"（提前行权）| "Expire"（提前放弃行权）
+var exCheck = await tradeClient.CheckOptionExerciseAsync(
+    contractId: 123456789L, type: "Exercise", quantity: 1);
 
-// 日历价差 / Calendar Spread — 近月卖远月买，同行权价
-// ComboType = "CALENDAR"
+var exPositions = await tradeClient.GetOptionExercisePositionsAsync(type: "Exercise");
 
-// Iron Condor — 4条腿，使用 CUSTOM
-// ComboType = "CUSTOM"
+var exSubmit = await tradeClient.SubmitOptionExerciseAsync(
+    contractId: 123456789L, type: "Exercise", quantity: 1,
+    executingDate: "2026-08-21", isForce: false);
 
-// 备兑策略 / Covered Call — 买股 + 卖 Call
-// Leg1: SecType="STK", Action="BUY", Ratio=100
-// Leg2: SecType="OPT", Action="SELL"
-// ComboType = "COVERED"
+var exRecords = await tradeClient.GetOptionExerciseRecordsAsync(page: 1, size: 20);
+
+var exCancel = await tradeClient.CancelOptionExerciseAsync(exerciseId: 987654321L);
 ```
 
-### 组合策略类型总览 / Combo Strategy Types
-
-| ComboType | 策略 Strategy | 说明 Description |
-|-----------|--------------|-----------------|
-| `VERTICAL` | 垂直价差 | 同到期日不同行权价 Same expiry, different strikes |
-| `STRADDLE` | 跨式 | 同行权价同到期日 Call+Put, same strike & expiry |
-| `STRANGLE` | 宽跨式 | 不同行权价同到期日 Different strikes, same expiry |
-| `CALENDAR` | 日历价差 | 同行权价不同到期日 Same strike, different expiries |
-| `DIAGONAL` | 对角线价差 | 不同行权价不同到期日 Different strikes & expiries |
-| `COVERED` | 备兑 | 持有股票+卖Call Long stock + short call |
-| `PROTECTIVE` | 保护性 | 持有股票+买Put Long stock + long put |
-| `SYNTHETIC` | 合成 | 合成多/空头 Synthetic long/short |
-| `CUSTOM` | 自定义 | 4条腿组合（Iron Condor等） |
+- `Exercise` 时 `executingDate`（yyyy-MM-dd）与 `isForce` 必填
+- `itmRate`（0-10）为 `Expire` 专用
+- 每个方法都有可选的 `account` 参数，省略时用 `TigerConfig.DefaultAccount`
 
 ---
 
 ## 查询期权持仓 / Query Option Positions
 
 ```csharp
-var request = new TigerRequest<PositionsResponse>()
+var optPositionsRequest = new TigerRequest<PositionsResponse>()
 {
     ApiMethodName = TradeApiService.POSITIONS,
-    ModelValue = new PositionModel()
+    ModelValue = new PositionsModel()
     {
-        Account = "123456",
-        SecType = "OPT"
+        SecType = SecType.OPT,
+        Right = "CALL",
+        Strike = 150.0
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
-
-// 期权持仓额外字段 / Option-specific position fields:
-// Strike - 行权价
-// Expiry - 到期日
-// Right  - CALL/PUT
+PositionsResponse optPositions = await tradeClient.ExecuteAsync(optPositionsRequest);
+// 列表在 Data.Items
 ```
 
 ---
 
 ## 注意事项 / Notes
 
-- 港股期权需先用 `OPTION_SYMBOL` 获取代码映射 / HK options require symbol mapping
-- 期权每张合约通常代表100股标的 / Each contract = 100 shares
-- 期权链返回的 Greeks 为上一交易日收盘值，盘中请用 `OPTION_INDICATOR` / Chain Greeks are from previous close; use `OPTION_INDICATOR` for intraday
-- 行权价小数位须和期权链一致 / Strike decimals must match the option chain
-- 期权行情需要期权行情权限 / Option quotes require option quote permission
-- 支持 `Execute()` 同步和 `ExecuteAsync()` 异步两种调用方式
-- 机构用户额外传 `SecretKey` 字段
+- **`Expiry` 是 `long` 毫秒时间戳**，用 `DateUtil.ConvertTimestamp(date, timeZone)` 转换；
+  `Strike` / `Right` 是 `string`
+- `Market` / `SecType` / `ActionType` / `OrderType` / `SortDir` / `Language` 都是枚举
+- 各接口的模型不同：`OptionChainV3Model`（chain）、`OptionBasicModel`（brief/depth）、
+  `OptionKlineV2Model`（kline）、`BatchApiModel<OptionCommonModel>`（trade tick）、
+  `OptionModel`（HK symbols）、`OptionAnalysisModel`（analysis）
+- **SDK 没有 `OPTION_INDICATOR` 常量**；单合约 Greeks 通过
+  `OPTION_CHAIN` + `ReturnGreekValue = true` 获取
+- **SDK 没有 `PLACE_COMBO_ORDER` 常量**；组合单用 `BuildMultiLegOrder` + `PLACE_ORDER`
+- **SDK 没有 `OPTION_TIMELINE` 的模型/响应类型**（仅有常量）
+- 合约类型是 `ContractItem`，不是 `Contract`
+- 港股期权需先用 `ALL_HK_OPTION_SYMBOLS` 获取代码映射
+- 期权每张合约通常代表 100 股标的；行权价小数位须和期权链一致
+- `Execute`/`ExecuteAsync` 不抛异常，检查 `IsSuccess()` / `Code`
