@@ -434,6 +434,35 @@ splits = quote_client.get_corporate_split(
 # 属性: symbol, execute_date, from_factor, to_factor
 ```
 
+### 代码变更 / Symbol Change（SDK 3.7.0+）
+
+```python
+changes = quote_client.get_corporate_symbol_change(
+    symbols=['META'], market='US',
+    begin_date='2022-01-01', end_date='2023-01-01')
+# 返回 pandas.DataFrame
+```
+
+### 退市事件 / Delisting（SDK 3.7.0+）
+
+```python
+delistings = quote_client.get_corporate_delisting(
+    symbols=['AAPL'], market='US',
+    begin_date='2024-01-01', end_date='2026-01-01')
+```
+
+### 新股上市 / IPO（SDK 3.7.0+）
+
+```python
+ipos = quote_client.get_corporate_ipo(
+    symbols=['AAPL'], market='US',
+    begin_date='2024-01-01', end_date='2026-01-01')
+```
+
+三个方法签名一致：`(symbols, market, begin_date, end_date, timezone=None)`，
+均返回 `pandas.DataFrame`。`CorporateActionType` 新增 `SYMBOL_CHANGE`、`DELISTING`、`IPO`。
+All three share the signature `(symbols, market, begin_date, end_date, timezone=None)`.
+
 ### 财报日历 / Earnings Calendar
 
 ```python
@@ -680,7 +709,10 @@ from tigeropen.common.consts import SecurityType
 symbols = quote_client.get_symbols(market=Market.US, sec_type=SecurityType.CC)
 
 # 实时行情 / Real-time quotes
-briefs = quote_client.get_cc_briefs(symbols=['BTC/USD', 'ETH/USD'])
+# 注意：没有 get_cc_briefs 方法；用 get_stock_briefs 并传 sec_type
+# There is no get_cc_briefs; use get_stock_briefs with sec_type
+briefs = quote_client.get_stock_briefs(symbols=['BTC/USD', 'ETH/USD'],
+                                       sec_type=SecurityType.CC)
 
 # K线 / K-lines
 bars = quote_client.get_bars(['BTC/USD'], period=BarPeriod.DAY, limit=30, sec_type=SecurityType.CC)

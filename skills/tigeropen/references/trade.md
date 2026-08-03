@@ -405,6 +405,75 @@ trade_client.place_order(order)
 
 ---
 
+## 冰山单 / Iceberg Order（SDK 3.6.0+）
+
+大单拆分为小单分批展示，减少市场冲击 / Splits a large order into visible slices.
+
+```python
+from tigeropen.common.consts import PriceType
+from tigeropen.common.util.order_utils import iceberg_order
+
+# 基础形式：display_size 必填
+order = iceberg_order(account, contract, action='BUY', quantity=1000,
+                      limit_price=180.0, display_size=100)
+
+# 完整形式
+order = iceberg_order(
+    account, contract, action='BUY', quantity=1000, limit_price=180.0,
+    display_size=100,            # 每次展示数量（必填）
+    min_display_size=50,         # 最小展示数量，默认等于 display_size
+    check_intervals=30,          # 刷新间隔（秒），不填由服务端决定
+    price_type=PriceType.LIMIT_PRICE,
+    start_time=None,             # 生效开始时间（epoch 毫秒）
+    end_time=None,               # 生效结束时间（epoch 毫秒）
+    time_in_force='DAY')
+
+trade_client.place_order(order)
+```
+
+`PriceType` 枚举共 4 个值：`LIMIT_PRICE`（限价）、`ASK_PRICE`（卖一价）、
+`BID_PRICE`（买一价）、`LATEST_PRICE`（最新价）。
+
+---
+
+## 期权提前行权 / Option Early Exercise（SDK 3.5.9+）
+
+```python
+from tigeropen.common.consts import OptionExerciseType
+
+# 1. 行权检验（预估行权后持仓变化）/ Check
+check = trade_client.check_option_exercise(
+    contract_id=123456789,
+    exercise_type=OptionExerciseType.EXERCISE,
+    quantity=1.0,
+    executing_date='2026-08-21')
+
+# 2. 查询可行权持仓 / Exercisable positions
+positions = trade_client.get_option_exercise_positions(
+    exercise_type=OptionExerciseType.EXERCISE)
+
+# 3. 提交行权申请 / Submit
+ok = trade_client.submit_option_exercise(
+    contract_id=123456789,
+    exercise_type=OptionExerciseType.EXERCISE,
+    quantity=1.0,
+    executing_date='2026-08-21')
+
+# 4. 查询行权申请记录（分页）/ Records
+records = trade_client.get_option_exercise_records(page=1, size=20)
+
+# 5. 撤销行权申请 / Cancel
+cancelled = trade_client.cancel_option_exercise(exercise_id=987654321)
+```
+
+`OptionExerciseType` 枚举：`EXERCISE`（值 `"Exercise"`，提前行权）、
+`EXPIRE`（值 `"Expire"`，提前放弃行权）。
+`EXPIRE` 类型可在 `check_option_exercise` 中额外传 `itm_rate`（0-10，价内率阈值）。
+
+`submit_option_exercise` / `cancel_option_exercise` 返回 `bool`。
+
+---
+
 ## 预览订单 / Preview Order
 <!-- 当用户提到 "预览"、"佣金"、"保证金"、"preview"、"commission" 时 -->
 

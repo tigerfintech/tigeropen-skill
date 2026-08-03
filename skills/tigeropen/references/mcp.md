@@ -190,3 +190,13 @@ brew install coreutils
 - Tiger MCP 是 AI 连接 Tiger API 的工具，输出取决于 AI/LLM 能力
 - 用户承担所有投资决策风险 / Users bear all investment decision risks
 - 免责声明 / Disclaimer: https://docs.itigerup.com/docs/mcp
+
+---
+
+## 未启用的工具 / Tools Not Exposed
+
+以下 API 在 MCP server 源码中存在但**已注释未注册**，因此不可调用：
+`get_trading_calendar`、`market_scanner`。
+另有 `server_info` 仅在 debug 模式（`_debug_enable`）下注册。
+These exist in the server source but are commented out, so they are not callable;
+`server_info` only registers in debug mode.
