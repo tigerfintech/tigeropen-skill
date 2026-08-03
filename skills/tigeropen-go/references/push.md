@@ -7,8 +7,8 @@
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/push"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/push"
 )
 
 cfg, _ := config.NewClientConfig(
@@ -30,8 +30,8 @@ import (
     "os/signal"
     "syscall"
 
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/push"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/push"
 )
 
 func main() {
@@ -60,7 +60,7 @@ func main() {
         OnConnect: func() {
             fmt.Println("推送连接成功")
             // ⚠️ 在此处执行订阅 / Subscribe here after connection established
-            // 重连后订阅不会自动恢复，需在此重新订阅 / Subscriptions NOT auto-restored on reconnect
+            // SDK 重连成功后会自动恢复行情与账户订阅，此处无需重新订阅 / SDK auto-restores subscriptions after reconnect
             pc.SubscribeQuote([]string{"AAPL", "TSLA"})
             pc.SubscribeAsset("")    // 资产变动
             pc.SubscribeOrder("")    // 订单状态变动
@@ -153,6 +153,6 @@ pc.Disconnect()
 
 - **在 `OnConnect` 回调中执行订阅**，连接成功后才能订阅
 - SDK 自动处理断线重连，无需手动重连
-- ⚠️ **断线重连后订阅不会自动恢复**，必须在 `OnConnect` 回调中重新订阅 / Subscriptions NOT auto-restored after reconnect; re-subscribe in `OnConnect`
+- ✅ **断线重连后 SDK 自动恢复订阅**（`resubscribe()` 会重放行情与账户订阅，见 `push/push_client.go:468`）。请勿在 `OnConnect` 中重复订阅，否则会产生重复订阅 / SDK auto-restores subscriptions on reconnect; do NOT re-subscribe in `OnConnect` or you will double-subscribe
 - 心跳保活由 SDK 自动维护
 - 同一个 `PushClient` 实例只能有一个活跃连接

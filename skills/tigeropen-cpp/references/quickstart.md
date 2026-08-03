@@ -90,11 +90,8 @@ account=your_account_number
 
 using namespace TIGER_API;
 
-// 从配置文件目录加载（第一个参数 false = 生产环境）
+// 从配置文件目录加载（第一个参数固定传 false）
 ClientConfig config(false, "path/to/config/dir/");
-
-// 沙箱环境 / Sandbox
-ClientConfig sandbox_config(true, "path/to/config/dir/");
 ```
 
 `ClientConfig` 构造参数：

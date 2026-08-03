@@ -1,7 +1,7 @@
 {
   "name": "tigeropen",
-  "description": "Tiger Brokers OpenAPI Python SDK — complete skills for AI coding tools. Covers market data, trading, options, real-time push, CLI, and MCP server integration.",
-  "version": "3.5.6",
+  "description": "Tiger Brokers OpenAPI SDK skills for AI coding tools — Python, Java, Go, Rust, TypeScript, C#, C++. Covers market data, trading, options, real-time push, CLI, and MCP server integration.",
+  "version": "3.7.0",
   "author": {
     "name": "tigerbrokers"
   }

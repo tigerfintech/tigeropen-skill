@@ -5,10 +5,10 @@ description: |
   老虎证券 OpenAPI Java SDK 完整技能集。涵盖 SDK 配置、行情查询、股票/期货/期权交易、实时推送订阅、账户管理、策略示例。适用于构建 Java 交易应用、查询行情数据、下单交易、或集成老虎 API。
   用户提到以下关键词时自动使用 / Auto-activate on these keywords: 行情、报价、价格、K线、快照、买卖盘、深度、买入、卖出、下单、撤单、改单、交易、持仓、资金、账户、订单、委托、期权、期权链、到期日、期货、推送、订阅、选股、筛选、tigeropen、tiger API、Java SDK、quote、price、K-line、order、buy、sell、trade、position、asset、account、option、future、push、scanner
 license: Apache-2.0
-compatibility: Requires Java JDK 1.7+, Maven or Gradle, and a Tiger Brokers developer account
+compatibility: Requires Java JDK 1.8+, Maven or Gradle, and a Tiger Brokers developer account
 metadata:
   author: tigerbrokers
-  version: "2.0.3"
+  version: "2.6.0"
   language: zh_CN, en_US
 ---
 
@@ -20,8 +20,8 @@ metadata:
 > Trading involves real money. Default to **Paper Trading** account when generating trading code unless the user explicitly requests live trading. Always confirm order details with the user before live orders.
 
 - Docs: https://docs.itigerup.com/docs/prepare-java
-- GitHub: https://github.com/tigerfintech/openapi-java-sdk
-- SDK: Maven `com.tigerbrokers:openapi-java-sdk` | Java 1.7+
+- GitHub: https://github.com/tigerbrokers/openapi-java-sdk
+- SDK: Maven `io.github.tigerbrokers:openapi-java-sdk` | Java 1.8+
 
 ## Language Rules / 语言规则
 

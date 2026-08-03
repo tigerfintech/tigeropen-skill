@@ -10,7 +10,7 @@ The Tiger Open Platform Python SDK (tigeropen) provides trading and market data 
 
 - 官方文档 / Docs: https://docs.itigerup.com/docs/prepare
 - GitHub: https://github.com/tigerfintech/openapi-python-sdk
-- SDK Version: 3.5.6 | Python: 3.8 - 3.14
+- SDK Version: 3.7.0 | Python: 3.8 - 3.14
 
 ### 支持的市场和品种 / Supported Markets
 

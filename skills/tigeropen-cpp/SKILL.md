@@ -5,10 +5,10 @@ description: |
   老虎证券 OpenAPI C++ SDK 完整技能集。涵盖 SDK 编译配置、行情查询、交易、实时推送订阅。适用于用 C++ 构建交易应用、查询行情数据、下单交易。
   用户提到以下关键词时自动使用 / Auto-activate on these keywords: 行情、报价、K线、买入、卖出、下单、撤单、交易、持仓、资金、账户、订单、期权、期货、推送、订阅、C++ SDK、tigeropen cpp、openapi cpp、quote、price、K-line、order、buy、sell、trade、position、asset、option、future、push
 license: Apache-2.0
-compatibility: Requires C++17, CMake 3.15+, Boost 1.86, cpprestsdk, Protobuf v25.1
+compatibility: Requires C++14, CMake 3.15+, Boost 1.86, cpprestsdk, Protobuf 5.28.3, Abseil 20240722.0
 metadata:
   author: tigerbrokers
-  version: "3.0.0"
+  version: "1.3.0"
   language: zh_CN, en_US
 ---
 
@@ -21,7 +21,7 @@ metadata:
 
 - Docs: https://docs.itigerup.com/docs/prepare
 - GitHub: https://github.com/tigerfintech/openapi-cpp-sdk
-- C++17, CMake 3.15+, cross-platform (macOS/Linux/Windows)
+- C++14, CMake 3.15+, cross-platform (macOS/Linux/Windows)
 
 ## Language Rules / 语言规则
 

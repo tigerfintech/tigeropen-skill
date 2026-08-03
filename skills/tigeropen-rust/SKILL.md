@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Rust 1.70+, tokio async runtime
 metadata:
   author: tigerbrokers
-  version: "0.1.0"
+  version: "0.5.8"
   language: zh_CN, en_US
 ---
 
@@ -20,7 +20,7 @@ metadata:
 > Trading involves real money. Default to **Paper Trading** when generating trading code. Always confirm order details before live orders.
 
 - Docs: https://docs.itigerup.com/docs/prepare
-- GitHub: https://github.com/tigerfintech/openapi-sdks
+- GitHub: https://github.com/tigerfintech/openapi-rust-sdk
 - Crate: `tigeropen` | Rust 1.70+, tokio async
 
 ## Language Rules / 语言规则

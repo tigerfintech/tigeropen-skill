@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Go 1.20+
 metadata:
   author: tigerbrokers
-  version: "0.1.0"
+  version: "0.5.1"
   language: zh_CN, en_US
 ---
 
@@ -20,8 +20,8 @@ metadata:
 > Trading involves real money. Default to **Paper Trading** when generating trading code. Always confirm order details before live orders.
 
 - Docs: https://docs.itigerup.com/docs/prepare
-- GitHub: https://github.com/tigerfintech/openapi-sdks
-- Module: `github.com/tigerfintech/openapi-sdks/go` | Go 1.20+
+- GitHub: https://github.com/tigerfintech/openapi-go-sdk
+- Module: `github.com/tigerfintech/openapi-go-sdk` | Go 1.20+
 
 ## Language Rules / 语言规则
 
@@ -46,10 +46,10 @@ import (
     "fmt"
     "log"
 
-    "github.com/tigerfintech/openapi-sdks/go/client"
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/quote"
-    "github.com/tigerfintech/openapi-sdks/go/trade"
+    "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/quote"
+    "github.com/tigerfintech/openapi-go-sdk/trade"
 )
 
 func main() {

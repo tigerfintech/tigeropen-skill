@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Python 3.8+, pip, and a Tiger Brokers developer account
 metadata:
   author: tigerbrokers
-  version: "3.5.6"
+  version: "3.7.0"
   language: zh_CN, en_US
   openclaw:
     requires:

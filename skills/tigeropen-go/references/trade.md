@@ -19,10 +19,10 @@
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/client"
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/model"
-    "github.com/tigerfintech/openapi-sdks/go/trade"
+    "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/model"
+    "github.com/tigerfintech/openapi-go-sdk/trade"
 )
 
 cfg, _ := config.NewClientConfig(
@@ -40,7 +40,7 @@ tc := trade.NewTradeClient(httpClient, cfg.Account)
 ### 创建订单 / Create Order
 
 ```go
-import "github.com/tigerfintech/openapi-sdks/go/model"
+import "github.com/tigerfintech/openapi-go-sdk/model"
 
 // 限价单 / Limit order
 order := model.LimitOrder("AAPL", "BUY", 100, 150.0)

@@ -11,7 +11,7 @@ The Tiger Open Platform Java SDK provides trading and market data APIs for stock
 - 官方文档 / Docs: https://quant.itigerup.com/openapi/java/overview/introduction
 - GitHub: https://github.com/tigerbrokers/openapi-java-sdk
 - Gitee: https://gitee.com/tigerbrokers/openapi-java-sdk
-- SDK Version: 2.4.1 | Java: JDK 1.7+ (64-bit), 推荐 1.8+
+- SDK Version: 2.6.0 | Java: JDK 1.8+ (64-bit)
 
 ### 支持的市场和品种 / Supported Markets
 
@@ -31,7 +31,7 @@ The Tiger Open Platform Java SDK provides trading and market data APIs for stock
 <dependency>
   <groupId>io.github.tigerbrokers</groupId>
   <artifactId>openapi-java-sdk</artifactId>
-  <version>2.4.1</version>
+  <version>2.6.0</version>
 </dependency>
 ```
 
@@ -51,7 +51,7 @@ The Tiger Open Platform Java SDK provides trading and market data APIs for stock
 
 ```groovy
 dependencies {
-    implementation 'io.github.tigerbrokers:openapi-java-sdk:2.4.1'
+    implementation 'io.github.tigerbrokers:openapi-java-sdk:2.6.0'
 }
 ```
 

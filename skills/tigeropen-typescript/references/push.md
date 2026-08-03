@@ -47,7 +47,7 @@ pc.setCallbacks({
   onConnect: () => {
     console.log('推送连接成功');
     // ⚠️ 在此处执行订阅 / Subscribe here after connection established
-    // 重连后订阅不会自动恢复，需在此重新订阅 / Subscriptions NOT auto-restored on reconnect
+    // SDK 重连成功后会自动恢复行情与账户订阅，此处无需重新订阅 / SDK auto-restores subscriptions after reconnect
     pc.subscribeQuote(['AAPL', 'TSLA']);
     pc.subscribeAsset();
     pc.subscribeOrder();
@@ -150,6 +150,6 @@ pc.disconnect();
 
 - **在 `onConnect` 回调中执行订阅**，连接成功后才能订阅
 - SDK 自动处理断线重连，无需手动重连
-- ⚠️ **断线重连后订阅不会自动恢复**，必须在 `onConnect` 回调中重新订阅 / Subscriptions NOT auto-restored after reconnect; re-subscribe in `onConnect`
+- ✅ **断线重连后 SDK 自动恢复订阅**（`resubscribe()` 见 `src/push/push-client.ts:380`）。请勿在 `onConnect` 中重复订阅，否则会产生重复订阅 / SDK auto-restores subscriptions on reconnect; do NOT re-subscribe in `onConnect`
 - 心跳保活由 SDK 自动维护
 - 同一个 `PushClient` 实例只能有一个活跃连接

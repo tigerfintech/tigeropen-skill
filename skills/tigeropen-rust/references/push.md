@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         on_connect: Some(Arc::new(move || {
             println!("推送连接成功");
             // ⚠️ 在此处执行订阅 / Subscribe here after connection established
-            // 重连后订阅不会自动恢复，需在此重新订阅 / Subscriptions NOT auto-restored on reconnect
+            // SDK 重连成功后会自动恢复行情与账户订阅，此处无需重新订阅 / SDK auto-restores subscriptions after reconnect
             pc_clone.add_subscription(SubjectType::Quote, &["AAPL".into(), "TSLA".into()]);
             pc_clone.add_account_sub(SubjectType::Asset);
             pc_clone.add_account_sub(SubjectType::Order);
@@ -217,7 +217,7 @@ pc.disconnect();
 
 - 调用 `pc.connect().await?` 后，在 `on_connect` 回调中执行订阅（确保连接成功后才订阅）
 - SDK 自动处理断线重连（`auto_reconnect` 默认为 `true`）
-- ⚠️ **断线重连后订阅不会自动恢复**，必须在 `on_connect` 回调中重新订阅 / Subscriptions NOT auto-restored after reconnect; re-subscribe in `on_connect`
+- ✅ **断线重连后 SDK 自动恢复订阅**（`resubscribe()` 见 `src/push/push_client.rs:729`）。请勿在 `on_connect` 中重复订阅，否则会产生重复订阅 / SDK auto-restores subscriptions on reconnect; do NOT re-subscribe in `on_connect`
 - 心跳保活由 SDK 自动维护
 - 回调函数必须实现 `Send + Sync`，在多线程环境中需使用 `Arc`
 - 同一个 `PushClient` 实例只能有一个活跃连接

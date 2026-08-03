@@ -7,9 +7,9 @@
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/client"
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/quote"
+    "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/quote"
 )
 
 cfg, _ := config.NewClientConfig(

@@ -8,13 +8,13 @@
 ### NuGet
 
 ```bash
-dotnet add package TigerOpenAPI
+dotnet add package TigerBrokers.OpenAPI
 ```
 
 或在 `.csproj` 中添加：
 
 ```xml
-<PackageReference Include="TigerOpenAPI" Version="*" />
+<PackageReference Include="TigerBrokers.OpenAPI" Version="*" />
 ```
 
 ---
@@ -63,8 +63,7 @@ TigerConfig config = new TigerConfig()
 | `TigerId` | Tiger ID（可代替配置文件） | — |
 | `PrivateKey` | RSA 私钥（可代替配置文件） | — |
 | `DefaultAccount` | 默认账户号（交易请求自动填入） | 从配置文件读取 |
-| `Environment` | `Env.PROD`（生产）/ `Env.SANDBOX`（沙箱） | `Env.PROD` |
-| `Language` | `Language.zh_CN` / `Language.en_US` | `Language.zh_CN` |
+| `Language` | `Language.zh_CN` / `Language.en_US` | `Language.en_US` |
 | `TimeZone` | `CustomTimeZone.HK_ZONE` 等 | — |
 | `FailRetryCounts` | HTTP 重试次数（0–5，Polly 指数退避） | 2 |
 | `AutoGrabPermission` | 自动申请行情权限 | `false` |
@@ -204,4 +203,4 @@ var accounts = await tradeClient.ExecuteAsync(accountsRequest);
 1. 老虎证券账户 + 开发者 API 权限：https://developer.itigerup.com/
 2. 准备好 `tiger_id`、RSA 私钥（2048 位）、账户号
 3. 行情数据需要对应市场的行情权限
-4. .NET >= 6.0 / C# >= 8.0
+4. .NET 10.0 (net10.0) / C# 14 (SDK default)

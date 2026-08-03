@@ -1,12 +1,12 @@
 # Tiger OpenAPI Go SDK — Quickstart
 
 > Go SDK 快速入门 / Quick Start for Go SDK
-> GitHub: https://github.com/tigerfintech/openapi-sdks
+> GitHub: https://github.com/tigerfintech/openapi-go-sdk
 
 ## 安装 / Installation
 
 ```bash
-go get github.com/tigerfintech/openapi-sdks/go@latest
+go get github.com/tigerfintech/openapi-go-sdk@latest
 ```
 
 要求 / Requirements: Go 1.20+
@@ -19,7 +19,7 @@ go get github.com/tigerfintech/openapi-sdks/go@latest
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/config"
+    "github.com/tigerfintech/openapi-go-sdk/config"
 )
 
 cfg, err := config.NewClientConfig(
@@ -62,7 +62,6 @@ export TIGEROPEN_ACCOUNT=your_account
 | 配置文件 | `WithPropertiesFile` | .properties 文件路径 | - |
 | 语言 | `WithLanguage` | `zh_CN` / `en_US` | - |
 | 超时 | `WithTimeout` | 请求超时时长（默认 15s） | - |
-| 沙箱 | `WithSandboxDebug` | 使用沙箱环境（模拟） | - |
 
 ---
 
@@ -70,10 +69,10 @@ export TIGEROPEN_ACCOUNT=your_account
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/client"
-    "github.com/tigerfintech/openapi-sdks/go/quote"
-    "github.com/tigerfintech/openapi-sdks/go/trade"
-    "github.com/tigerfintech/openapi-sdks/go/push"
+    "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/quote"
+    "github.com/tigerfintech/openapi-go-sdk/trade"
+    "github.com/tigerfintech/openapi-go-sdk/push"
 )
 
 httpClient := client.NewHttpClient(cfg)
@@ -134,4 +133,4 @@ json.Unmarshal(result, &data)
 所有 API 返回 `(json.RawMessage, error)`，需要自行 `json.Unmarshal` 解析。
 
 **Q: 模拟账户和实盘账户区别?**
-模拟账户在开发者后台申请，`sandboxDebug=true` 连接沙箱环境；实盘账户直接使用生产域名。
+模拟账户在开发者后台申请。SDK 根据账号自动识别模拟/实盘账户并路由到对应域名，无需额外配置。

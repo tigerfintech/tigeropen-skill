@@ -1,7 +1,7 @@
 # Tiger OpenAPI Rust SDK — Quickstart
 
 > Rust SDK 快速入门 / Quick Start for Rust SDK
-> GitHub: https://github.com/tigerfintech/openapi-sdks
+> GitHub: https://github.com/tigerfintech/openapi-rust-sdk
 
 ## 安装 / Installation
 
@@ -69,7 +69,6 @@ export TIGEROPEN_ACCOUNT=your_account
 | `.language(Language::EnUs)` | `Language::ZhCn` / `Language::EnUs` | - |
 | `.timezone(tz)` | 时区字符串 | - |
 | `.timeout(Duration::from_secs(30))` | 请求超时（默认 15s） | - |
-| `.sandbox_debug(true)` | 使用沙箱环境（模拟账户） | - |
 
 ---
 
@@ -187,7 +186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 所有 API 返回 `Result<Option<serde_json::Value>, TigerError>`，需手动用 `serde_json` 解析。
 
 **Q: 模拟账户和实盘账户区别?**
-模拟账户在开发者后台申请，`.sandbox_debug(true)` 连接沙箱环境；实盘账户直接使用生产域名。
+模拟账户在开发者后台申请。SDK 根据账号自动识别模拟/实盘账户并路由到对应域名，无需额外配置。
 
 **Q: `async` 运行时要求?**
 必须在 tokio 运行时中使用，通常在 `main` 函数加 `#[tokio::main]`。

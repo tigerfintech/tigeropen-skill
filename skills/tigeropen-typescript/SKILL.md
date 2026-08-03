@@ -8,7 +8,7 @@ license: MIT
 compatibility: Requires Node.js 16+, supports ESM and CommonJS
 metadata:
   author: tigerbrokers
-  version: "0.1.0"
+  version: "0.5.3"
   language: zh_CN, en_US
 ---
 
@@ -20,7 +20,7 @@ metadata:
 > Trading involves real money. Default to **Paper Trading** when generating trading code. Always confirm order details before live orders.
 
 - Docs: https://docs.itigerup.com/docs/prepare
-- npm: `npm install tigeropen` | Node.js 16+, ESM/CommonJS
+- npm: `npm install @tigeropenapi/tigeropen` | Node.js 16+, ESM/CommonJS
 
 ## Language Rules / 语言规则
 

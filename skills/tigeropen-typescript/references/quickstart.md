@@ -1,16 +1,16 @@
 # Tiger OpenAPI TypeScript SDK — Quickstart
 
 > TypeScript SDK 快速入门 / Quick Start for TypeScript SDK
-> npm: https://www.npmjs.com/package/tigeropen
+> npm: https://www.npmjs.com/package/@tigeropenapi/tigeropen
 
 ## 安装 / Installation
 
 ```bash
-npm install tigeropen
+npm install @tigeropenapi/tigeropen
 # 或 / or
-yarn add tigeropen
+yarn add @tigeropenapi/tigeropen
 # 或 / or
-pnpm add tigeropen
+pnpm add @tigeropenapi/tigeropen
 ```
 
 要求 / Requirements: Node.js 16+，支持 ESM 和 CommonJS
@@ -66,7 +66,6 @@ export TIGEROPEN_ACCOUNT=your_account
 | `propertiesFilePath` | .properties 文件路径 | - | - |
 | `language` | `zh_CN` / `en_US` | - | `zh_CN` |
 | `timeout` | 请求超时（秒） | - | 15 |
-| `sandboxDebug` | 使用沙箱环境 | - | `false` |
 
 ---
 
@@ -153,4 +152,4 @@ try {
 参考官方文档 https://docs.itigerup.com/docs/prepare，使用 RSA-2048 生成密钥对，上传公钥到开发者后台。
 
 **Q: 模拟账户和实盘账户区别?**
-模拟账户在开发者后台申请，`sandboxDebug: true` 连接沙箱环境；实盘账户直接使用生产域名。
+模拟账户在开发者后台申请。SDK 根据账号自动识别模拟/实盘账户并路由到对应域名，无需额外配置。
