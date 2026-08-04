@@ -359,13 +359,17 @@ tigeropen quote capital distribution AAPL --market US
 ## 港股经纪商 / HK Broker Data
 
 ```python
+from tigeropen.common.consts import Market, SortDirection
+
 # 经纪商席位 / Broker seats (返回 StockBroker 对象)
 broker = quote_client.get_stock_broker('00700', limit=40)
 # broker.bid_broker: 买方经纪商列表(LevelBroker: level, price, broker_count, broker)
 # broker.ask_broker: 卖方经纪商列表
 
 # 经纪商持仓(CCASS) / Broker holdings (CCASS) - 独立方法
-hold = quote_client.get_broker_hold(symbol='00700', limit=40)
+# market/order_by/direction/limit/page — 无 symbol 参数 / no symbol parameter
+hold = quote_client.get_broker_hold(market=Market.HK, order_by='marketValue',
+                                    direction=SortDirection.DESC, limit=40)
 ```
 
 ## 热门交易排行 / Hot Trading Rank
@@ -610,19 +614,19 @@ exchanges = quote_client.get_future_exchanges()
 contracts = quote_client.get_future_contracts(exchange='CME')
 
 # 指定合约 / Specific contract
-contract = quote_client.get_future_contract(symbol='CL2509')
+contract = quote_client.get_future_contract(contract_code='CL2509')
 
 # 主力合约 / Current/main contract
-current = quote_client.get_current_future_contract(contract_type='CL')
+current = quote_client.get_current_future_contract(future_type='CL')
 
 # 连续合约 / Continuous contracts
-continuous = quote_client.get_future_continuous_contracts(contract_type='CL')
+continuous = quote_client.get_future_continuous_contracts(future_type='CL')
 
 # 所有合约(某品种) / All contracts for a type
-all_contracts = quote_client.get_all_future_contracts(contract_type='CL')
+all_contracts = quote_client.get_all_future_contracts(future_type='CL')
 
 # 交易时间 / Trading times
-times = quote_client.get_future_trading_times(symbol='CL2509')
+times = quote_client.get_future_trading_times(identifier='CL2509')
 
 # 实时行情 / Real-time quotes
 brief = quote_client.get_future_brief(identifiers=['CL2509'])
@@ -636,7 +640,7 @@ depth = quote_client.get_future_depth(identifiers=['CL2509'])
 ticks = quote_client.get_future_trade_ticks(identifier='CL2509', limit=50)
 
 # K线 / K-lines
-bars = quote_client.get_future_bars(identifier='CL2509', period=BarPeriod.DAY, limit=60)
+bars = quote_client.get_future_bars(identifiers=['CL2509'], period=BarPeriod.DAY, limit=60)
 
 # 分页K线 / Paginated K-lines
 bars = quote_client.get_future_bars_by_page(identifier='CL2509', period=BarPeriod.DAY,
@@ -693,7 +697,7 @@ quote = quote_client.get_fund_quote(symbols=['ARKK'])
 
 # 历史行情 / Historical quotes
 history = quote_client.get_fund_history_quote(symbols=['ARKK'],
-                                               begin_date='2025-01-01', end_date='2025-06-30')
+                                               begin_time='2025-01-01', end_time='2025-06-30')
 ```
 
 ---
@@ -728,10 +732,15 @@ timeline = quote_client.get_timeline(['BTC/USD'], sec_type=SecurityType.CC)
 > CLI 暂不支持，请使用 Python SDK。No CLI equivalent — use Python SDK.
 
 ```python
+from tigeropen.common.consts import SortDirection
+
 # 窝轮筛选器 / Warrant scanner
+# 排序参数名为 sort_field_name / sort_dir(SortDirection 枚举)
 warrants = quote_client.get_warrant_filter(
-    symbol='00700', filter_type='warrant',  # warrant/cbbc/inline
-    sort_field='changeRate', sort_dir='DESC')
+    symbol='00700',
+    sort_field_name='changeRate', sort_dir=SortDirection.DESC)
+# 窝轮类型等条件通过 filter_params=WarrantFilterParams(...) 传入
+# other criteria go in filter_params (WarrantFilterParams)
 
 # 窝轮行情 / Warrant quotes
 briefs = quote_client.get_warrant_briefs(symbols=['12345'])

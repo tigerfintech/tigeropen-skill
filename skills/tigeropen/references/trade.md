@@ -109,7 +109,8 @@ contract = trade_client.get_contract(symbol='AAPL', sec_type='OPT',
                                       expiry='20250829', strike=150.0, put_call='CALL')
 
 # 批量合约 / Multiple contracts
-contracts = trade_client.get_contracts(symbols=['AAPL', 'TSLA'], sec_type='STK')
+# 关键字是 symbol（单数），但接受 list / keyword is `symbol` (singular), accepts a list
+contracts = trade_client.get_contracts(symbol=['AAPL', 'TSLA'], sec_type='STK')
 
 # 衍生品合约列表 / Derivative contracts
 derivatives = trade_client.get_derivative_contracts(symbol='AAPL', sec_type='OPT')

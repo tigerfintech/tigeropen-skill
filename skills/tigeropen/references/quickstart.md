@@ -244,19 +244,29 @@ for p in positions:
 
 ```python
 from tigeropen.common.consts import (
-    Market,        # ALL, US, HK, CN, SG, AU
-    SecurityType,  # STK, OPT, FUT, WAR, IOPT, CASH, FUND, MLEG, CC
-    Currency,      # USD, HKD, CNH, SGD, AUD
+    Market,        # ALL, US, HK, CN, SG
+    SecurityType,  # ALL, STK, OPT, WAR, IOPT, FUT, FOP, CASH, MLEG, FUND, CC
+    Currency,      # ALL, USD, HKD, CNH, SGD
     Language,      # zh_CN, zh_TW, en_US
-    OrderType,     # MKT, LMT, STP, STP_LMT, TRAIL, TWAP, VWAP
-    OrderStatus,   # Initial, PendingSubmit, Submitted, PartiallyFilled, Filled, Cancelled, Inactive, PendingCancel
+    OrderType,     # MKT, LMT, STP, STP_LMT, TRAIL, AM, AL, TWAP, VWAP, OCA, ICEBERG
+    OrderStatus,   # PENDING_NEW, NEW, HELD, PARTIALLY_FILLED, FILLED,
+                   # CANCELLED, PENDING_CANCEL, REJECTED, EXPIRED
     BarPeriod,     # DAY, WEEK, MONTH, YEAR, ONE_MINUTE, THREE_MINUTES, FIVE_MINUTES, TEN_MINUTES,
                    # FIFTEEN_MINUTES, HALF_HOUR, FORTY_FIVE_MINUTES, ONE_HOUR, TWO_HOURS, THREE_HOURS, FOUR_HOURS, SIX_HOURS
     QuoteRight,    # BR(前复权/forward), NR(不复权/none)
-    TradingSession,  # PreMarket, Regular, AfterHours
-    TimeInForce,   # DAY, GTC, GTD
+    TradingSession,  # All, PreMarket, Regular, AfterHours, OverNight
 )
+# 订单有效期没有枚举，直接传字符串 'DAY' / 'GTC'
+# No TimeInForce enum — pass the string 'DAY' or 'GTC'
 ```
+
+> ⚠️ **OrderStatus 的成员名与取值不同**：成员名是大写下划线式（`OrderStatus.FILLED`），
+> 而 `.value` 是驼峰式服务端值（`'Filled'`）。对照关系：
+> `NEW='Initial'`、`HELD='Submitted'`、`REJECTED='Inactive'`、`EXPIRED='Invalid'`，
+> 其余成员的值与名称同义。写代码用成员名，比对接口原始返回值用 `.value`。
+> Member names are UPPER_SNAKE (`OrderStatus.FILLED`); `.value` holds the CamelCase
+> server string (`'Filled'`). Note `NEW='Initial'`, `HELD='Submitted'`,
+> `REJECTED='Inactive'`, `EXPIRED='Invalid'`.
 
 ### SecurityType 证券类型
 
@@ -291,15 +301,24 @@ from tigeropen.common.consts import (
 
 ### Market Scanner 相关枚举
 
+四个字段类在 **`tigeropen.common.consts.filter_fields`**，`SortDirection` 在
+`tigeropen.common.consts`；成员名大小写敏感，需照抄源码。
+The four field classes live in `consts.filter_fields`; member names are case-sensitive.
+
 ```python
-from tigeropen.common.consts import (
-    StockField,       # stockField: Change, ChangeRate, LatestPrice, Volume, Amount, TurnoverRate, FloatShare, FloatMarketValue...
-    AccumulateField,  # accumulateField: ChangeRate, Amount, Volume
-    FinancialField,   # financialField: TotalRevenue, NetIncome, EpsDiluted, ROE, PE_TTM, PB...
-    MultiTagField,    # multiTagField: HasOption, IsETF, IndustryCode, ExchangeCode
-    SortDirection,    # ASC, DESC
+from tigeropen.common.consts.filter_fields import (
+    StockField,       # 65 项，如 CurPrice, OpenPrice, Volume, Amount, MarketValue, FloatMarketVal, PeTTM, TurnoverRate, ttm_Eps
+    AccumulateField,  # 26 项，如 ChangeRate, ChangeValue, ROE, Eps, Net_Income, Total_Revenue（需 accumulate_period）
+    FinancialField,   # 68 项,如 TotalRevenue, OperatingIncome, NetIncome1YrGrowth, TotalAssetTurnover, InventoryTurnover
+    MultiTagField,    # 24 项,如 Industry, Concept, OptionsAvailable, ETF_TYPE, Week52HighFlag, TradeCurrency
 )
+from tigeropen.common.consts import SortDirection  # NO, ASC, DESC
 ```
+
+> 常见误写：`ChangeRate` / `LatestPrice` 不在 `StockField` 中——盘中涨跌幅用
+> `StockField.current_ChangeRate`，最新价用 `StockField.CurPrice`。
+> `ChangeRate`/`LatestPrice` are NOT `StockField` members; use
+> `StockField.current_ChangeRate` and `StockField.CurPrice`.
 
 ## 核心对象参考 / Key Object Reference
 
