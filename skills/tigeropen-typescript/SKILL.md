@@ -8,7 +8,7 @@ license: MIT
 compatibility: Requires Node.js 16+, supports ESM and CommonJS
 metadata:
   author: tigerbrokers
-  version: "0.5.3"
+  version: "0.5.4"
   language: zh_CN, en_US
 ---
 
