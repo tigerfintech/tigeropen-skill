@@ -176,8 +176,8 @@ client_config.account = 'your_paper_account'  # 17位数字模拟账号 / 17-dig
 # 模拟账户支持美股/港股/A股/期权
 ```
 
-> `sandbox_debug` 参数已废弃，请勿使用。SDK 通过账号自动识别模拟账户。
-> `sandbox_debug` is deprecated. SDK auto-detects paper accounts by account number.
+> 模拟账户无需额外开关，SDK 依账号自动识别。
+> No extra flag is needed for paper accounts; the SDK detects them from the account number.
 
 ## 完整入门示例 / Complete Quickstart
 
@@ -520,6 +520,5 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 - `QuoteClient` 应创建一次并复用 / Create once and reuse
 - 行情权限需单独购买，API 与 App 独立 / Quote permissions require separate purchase
 - 交易佣金与 App 一致，无额外 API 费用 / Trading fees same as app
-- `sandbox_debug` 参数已废弃，请勿使用 / `sandbox_debug` is deprecated, do not use
 - 官方文档 / Official docs: https://docs.itigerup.com/docs/prepare
 - 官方支持群 / Support: https://t.me/TigerBrokersAPISupport

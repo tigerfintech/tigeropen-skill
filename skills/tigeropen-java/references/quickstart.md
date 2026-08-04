@@ -411,17 +411,25 @@ TradeOrderRequest.buildStopLimitOrder(contract, ActionType.SELL, quantity, limit
 
 ### TigerHttpRequest 通用请求 / Generic Request
 
-用于调用未封装的API方法 / For calling unwrapped API methods:
+用于调用未封装的API方法 / For calling unwrapped API methods.
+
+已有专用请求类的接口应优先用专用类（如持仓用 `PositionsRequest`），
+只有 SDK 未封装的接口才走 `TigerHttpRequest`。
+Prefer the dedicated request class when one exists; `TigerHttpRequest` is the
+fallback for APIs the SDK does not wrap.
 
 ```java
-TigerHttpRequest request = new TigerHttpRequest(MethodName.POSITIONS);
+// 成交记录没有专用请求类，用通用请求
+// ORDER_TRANSACTIONS has no dedicated request class
+TigerHttpRequest request = new TigerHttpRequest(MethodName.ORDER_TRANSACTIONS);
 String bizContent = AccountParamBuilder.instance()
     .account(clientConfig.defaultAccount)
-    .market(Market.US)
     .secType(SecType.STK)
+    .symbol("AAPL")
     .buildJson();
 request.setBizContent(bizContent);
 TigerHttpResponse response = client.execute(request);
+// 通用请求返回原始 JSON，需自行解析 / returns raw JSON, parse it yourself
 ```
 
 ## 完整策略示例：动量策略 / Full Example: Momentum Strategy
@@ -541,7 +549,7 @@ public class Nasdaq100 {
 
   /** 平仓未入选股票 / Close positions not selected */
   private void closePosition() throws InterruptedException {
-    Map<String, Integer> positions = getPositions();
+    Map<String, Long> positions = getPositions();
     Set<String> needCloseSymbols = positions.keySet();
     for (String selectedSymbol : selectedSymbols) {
       needCloseSymbols.remove(selectedSymbol);
@@ -552,7 +560,9 @@ public class Nasdaq100 {
       needCloseSymbols.forEach(symbol -> {
         ContractItem contract = ContractItem.buildStockContract(symbol, Currency.USD.name());
         TradeOrderRequest request =
-            TradeOrderRequest.buildLimitOrder(contract, ActionType.SELL, positions.get(symbol), latestPrice.get(symbol));
+            // buildLimitOrder 的整股重载收 Integer；小数持仓需用 (Long, Integer quantityScale) 重载
+            TradeOrderRequest.buildLimitOrder(contract, ActionType.SELL,
+                positions.get(symbol).intValue(), latestPrice.get(symbol));
         orderRequests.add(request);
       });
       executeOrders(orderRequests);
@@ -629,18 +639,18 @@ public class Nasdaq100 {
   }
 
   /** 获取持仓 / Get positions */
-  private Map<String, Integer> getPositions() {
-    Map<String, Integer> result = new HashMap<>();
-    TigerHttpRequest request = new TigerHttpRequest(MethodName.POSITIONS);
+  private Map<String, Long> getPositions() {
+    Map<String, Long> result = new HashMap<>();
+    // 持仓有专用请求类，返回强类型对象，无需手工解析 JSON
+    PositionsRequest request = new PositionsRequest();
     String bizContent = AccountParamBuilder.instance()
         .account(clientConfig.defaultAccount).market(Market.US).secType(SecType.STK).buildJson();
     request.setBizContent(bizContent);
-    TigerHttpResponse response = client.execute(request);
-    if (response.getData() == null || response.getData().isEmpty()) return result;
-    JSONArray positions = JSON.parseObject(response.getData()).getJSONArray("items");
-    for (int i = 0; i < positions.size(); ++i) {
-      JSONObject pos = positions.getJSONObject(i);
-      result.put(pos.getString("symbol"), pos.getInteger("quantity"));
+    PositionsResponse response = client.execute(request);
+    if (!response.isSuccess() || response.getItem() == null) return result;
+    for (PositionDetail pos : response.getItem().getPositions()) {
+      // position 为 long，配合 positionScale 表示小数持仓
+      result.put(pos.getSymbol(), pos.getPosition());
     }
     return result;
   }
