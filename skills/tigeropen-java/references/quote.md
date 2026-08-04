@@ -186,7 +186,7 @@ QuoteSymbolNameResponse response = client.execute(QuoteSymbolNameRequest.newRequ
 **请求类：QuoteStockTradeRequest**
 
 ```java
-List<String> symbols = List.of("00700", "00810");
+List<String> symbols = Arrays.asList("00700", "00810");
 QuoteStockTradeResponse response = client.execute(QuoteStockTradeRequest.newRequest(symbols));
 // response.getStockTradeItems() -> List<QuoteStockTradeItem>
 ```
@@ -206,7 +206,7 @@ QuoteStockTradeResponse response = client.execute(QuoteStockTradeRequest.newRequ
 
 ```java
 TigerHttpRequest request = new TigerHttpRequest(MethodName.STOCK_DETAIL);
-List<String> symbols = List.of("TSLA");
+List<String> symbols = Arrays.asList("TSLA");
 String bizContent = QuoteParamBuilder.instance().symbols(symbols).market(Market.US).buildJson();
 request.setBizContent(bizContent);
 TigerHttpResponse response = client.execute(request);
@@ -258,7 +258,7 @@ TigerHttpResponse response = client.execute(request);
 需要财报权限，需联系管理员单独开通。
 
 ```java
-List<String> symbols = List.of("TIGR");
+List<String> symbols = Arrays.asList("TIGR");
 QuoteStockFundamentalRequest request = QuoteStockFundamentalRequest.newRequest(symbols, Market.US.name());
 QuoteStockFundamentalResponse response = client.execute(request);
 // response.getStockFundamentalItems()
@@ -304,7 +304,7 @@ QuoteStockFundamentalResponse response = client.execute(request);
 
 ```java
 QuoteRealTimeQuoteResponse response = client.execute(
-    QuoteRealTimeQuoteRequest.newRequest(List.of("AAPL"), true)); // true=含盘前盘后
+    QuoteRealTimeQuoteRequest.newRequest(Arrays.asList("AAPL"), true)); // true=含盘前盘后
 // response.getRealTimeQuoteItems() -> List<RealTimeQuoteItem>
 ```
 
@@ -359,7 +359,7 @@ QuoteRealTimeQuoteResponse response = client.execute(
 **请求类：QuoteDelayRequest**
 
 ```java
-List<String> symbols = List.of("AAPL", "TSLA");
+List<String> symbols = Arrays.asList("AAPL", "TSLA");
 QuoteDelayRequest request = QuoteDelayRequest.newRequest(symbols);
 QuoteDelayResponse response = client.execute(request);
 // response.getQuoteDelayItems() -> List<QuoteDelayItem>
@@ -377,7 +377,7 @@ QuoteDelayResponse response = client.execute(request);
 美股最多40档，港股最多10档。
 
 ```java
-List<String> symbols = List.of("DD");
+List<String> symbols = Arrays.asList("DD");
 QuoteDepthResponse response = client.execute(QuoteDepthRequest.newRequest(symbols, Market.US.name()));
 for (QuoteDepthItem item : response.getQuoteDepthItems()) {
     System.out.println(item.getSymbol());
@@ -410,8 +410,8 @@ for (QuoteDepthItem item : response.getQuoteDepthItems()) {
 支持收盘后查询当日全量逐笔记录，也支持盘中获取最新实时逐笔数据。
 
 ```java
-List<String> symbols = List.of("AAPL");
-QuoteTradeTickRequest request = QuoteTradeTickRequest.newRequest(symbols, 0, 30, 10);
+List<String> symbols = Arrays.asList("AAPL");
+QuoteTradeTickRequest request = QuoteTradeTickRequest.newRequest(symbols, 0L, 30L, 10);
 request.setTradeSession(TradeSession.Regular);
 QuoteTradeTickResponse response = client.execute(request);
 // response.getTradeTickItems() -> List<TradeTickItem>
@@ -454,7 +454,7 @@ QuoteTradeTickResponse response = client.execute(request);
 支持港股、美股K线。每次最多返回 1200 条记录。
 
 ```java
-List<String> symbols = List.of("AAPL");
+List<String> symbols = Arrays.asList("AAPL");
 // 日K / Daily
 QuoteKlineResponse response = client.execute(
     QuoteKlineRequest.newRequest(symbols, KType.day, "2023-05-16", "2023-05-19")
@@ -514,7 +514,7 @@ QuoteKlineResponse response = client.execute(
 ### PageToken 分页获取大量K线
 
 ```java
-List<String> symbols = List.of("AAPL");
+List<String> symbols = Arrays.asList("AAPL");
 QuoteKlineRequest request = QuoteKlineRequest.newRequest(symbols, KType.min1,
     "2022-04-25 00:00:00", "2022-04-28 00:00:00", TimeZoneId.NewYork);
 request.withLimit(200);
@@ -548,7 +548,7 @@ List<KlinePoint> list = PageTokenUtil.getKlineByPage("AAPL", KType.min1,
 
 ```java
 QuoteTimelineResponse response = client.execute(
-    QuoteTimelineRequest.newRequest(List.of("AAPL"), 1544129760000L));
+    QuoteTimelineRequest.newRequest(Arrays.asList("AAPL"), 1544129760000L));
 // response.getTimelineItems() -> List<TimelineItem>
 ```
 
@@ -586,7 +586,7 @@ QuoteTimelineResponse response = client.execute(
 **请求类：QuoteHistoryTimelineRequest**
 
 ```java
-List<String> symbols = List.of("AAPL");
+List<String> symbols = Arrays.asList("AAPL");
 QuoteHistoryTimelineRequest request = QuoteHistoryTimelineRequest.newRequest(symbols, "20220420");
 request.withRight(RightOption.br);
 QuoteHistoryTimelineResponse response = client.execute(request);
@@ -713,7 +713,7 @@ FutureExchangeResponse response = client.execute(FutureExchangeRequest.newReques
 **请求类：FutureContractByExchCodeRequest**
 
 ```java
-FutureContractByExchCodeResponse response = client.execute(
+FutureBatchContractResponse response = client.execute(
     FutureContractByExchCodeRequest.newRequest("CME"));
 // response.getFutureContractItems() -> List<FutureContractItem>
 ```
@@ -727,10 +727,10 @@ FutureContractByExchCodeResponse response = client.execute(
 
 ### 获取指定品种的合约 / Get Contracts by Type
 
-**请求类：FutureContractByTypeRequest**
+**请求类：FutureContractsRequest**（`FutureContractByTypeRequest` 不存在 / does not exist）
 
 ```java
-FutureContractByTypeResponse response = client.execute(FutureContractByTypeRequest.newRequest("CL"));
+FutureContractsResponse response = client.execute(FutureContractsRequest.newRequest("CL"));
 // response.getFutureContractItems()
 ```
 
@@ -766,7 +766,7 @@ FutureContractResponse response = client.execute(FutureContinuousContractRequest
 **请求类：FutureHistoryMainContractRequest**
 
 ```java
-List<String> contractCodes = List.of("ESmain");
+List<String> contractCodes = Arrays.asList("ESmain");
 FutureHistoryMainContractRequest request = FutureHistoryMainContractRequest.newRequest(
     contractCodes, "2023-06-01", "2023-10-05", TimeZoneId.NewYork);
 FutureHistoryMainContractResponse response = client.execute(request);
@@ -787,7 +787,7 @@ FutureTradingDateResponse response = client.execute(
 **请求类：FutureRealTimeQuoteRequest**
 
 ```java
-List<String> contractCodes = List.of("CL1902");
+List<String> contractCodes = Arrays.asList("CL1902");
 FutureRealTimeQuoteResponse response = client.execute(FutureRealTimeQuoteRequest.newRequest(contractCodes));
 // response.getFutureRealTimeItems() -> List<FutureRealTimeItem>
 ```
@@ -819,7 +819,7 @@ FutureRealTimeQuoteResponse response = client.execute(FutureRealTimeQuoteRequest
 
 ```java
 FutureDepthRequest request = FutureDepthRequest.newRequest(Collections.singletonList("XWmain"));
-FutureRealTimeQuoteResponse response = client.execute(request);
+FutureDepthResponse response = client.execute(request);
 // response.getFutureDepthItems()
 // FutureDepthItem: contractCode, contractId, ask(List), bid(List)
 // FutureDepthAskBidItem: price(BigDecimal), volume(Long)
@@ -853,7 +853,7 @@ FutureTickResponse response = client.execute(FutureTickRequest.newRequest("CL220
 热门合约近10年日K线，全部合约2017年8月至今分钟数据。
 
 ```java
-List<String> contractCodes = List.of("CL1901");
+List<String> contractCodes = Arrays.asList("CL1901");
 FutureKlineResponse response = client.execute(
     FutureKlineRequest.newRequest(contractCodes, FutureKType.min15,
         1535634249489L, 1538807049489L, 200));
@@ -876,7 +876,7 @@ FutureKlineResponse response = client.execute(
 ### 期货K线分页 / Futures K-line PageToken
 
 ```java
-List<String> contractCodes = List.of("NGmain");
+List<String> contractCodes = Arrays.asList("NGmain");
 FutureKlineRequest request = FutureKlineRequest.newRequest(contractCodes, FutureKType.day,
     1650920400000L, 1651870900000L, 3);
 while (true) {
@@ -907,7 +907,7 @@ FundSymbolResponse response = client.execute(FundSymbolRequest.newRequest());
 **请求类：FundContractsRequest**
 
 ```java
-List<String> symbols = List.of("IE00B11XZ988.USD", "LU0476943708.HKD");
+List<String> symbols = Arrays.asList("IE00B11XZ988.USD", "LU0476943708.HKD");
 FundContractsRequest request = FundContractsRequest.newRequest(symbols, Language.zh_CN);
 FundContractsResponse response = client.execute(request);
 // response.getFundContractItems() -> List<FundContractItem>
@@ -933,7 +933,7 @@ FundContractsResponse response = client.execute(request);
 **请求类：FundQuoteRequest**
 
 ```java
-List<String> symbols = List.of("IE00B11XZ988.USD", "LU0476943708.HKD");
+List<String> symbols = Arrays.asList("IE00B11XZ988.USD", "LU0476943708.HKD");
 FundQuoteRequest request = FundQuoteRequest.newRequest(symbols);
 FundQuoteResponse response = client.execute(request);
 // response.getQuoteItems() -> List<FundQuoteItem>
@@ -945,7 +945,7 @@ FundQuoteResponse response = client.execute(request);
 **请求类：FundHistoryQuoteRequest**
 
 ```java
-List<String> symbols = List.of("IE00B11XZ988.USD", "LU0476943708.HKD");
+List<String> symbols = Arrays.asList("IE00B11XZ988.USD", "LU0476943708.HKD");
 FundHistoryQuoteRequest request = FundHistoryQuoteRequest.newRequest(symbols);
 request.beginTime(DateUtils.getTimestamp("2023-07-01", TimeZoneId.Shanghai));
 request.endTime(DateUtils.getTimestamp("2023-07-26", TimeZoneId.Shanghai));
@@ -975,7 +975,7 @@ QuoteSymbolResponse response = client.execute(request);
 **请求类：QuoteRealTimeQuoteRequest**
 
 ```java
-List<String> symbols = List.of("BTC.USD", "ETH.USD");
+List<String> symbols = Arrays.asList("BTC.USD", "ETH.USD");
 QuoteRealTimeQuoteRequest request = QuoteRealTimeQuoteRequest.newCcRequest(symbols);
 QuoteRealTimeQuoteResponse response = client.execute(request);
 // response.getRealTimeQuoteItems()
@@ -1004,7 +1004,7 @@ QuoteRealTimeQuoteResponse response = client.execute(request);
 每次最多返回 1200 条。分钟级: BTC 支持2024年3月27日起。日K及以上: BTC 支持2010年7月13日起。
 
 ```java
-List<String> symbols = List.of("BTC.USD", "ETH.USD");
+List<String> symbols = Arrays.asList("BTC.USD", "ETH.USD");
 QuoteKlineRequest request = QuoteKlineRequest.newRequest(symbols, KType.min1,
     "2026-01-29", "2026-01-30", TimeZoneId.NewYork)
     .withLimit(200)
@@ -1030,7 +1030,7 @@ QuoteKlineResponse response = client.execute(request);
 **请求类：QuoteTimelineRequest**
 
 ```java
-List<String> symbols = List.of("BTC.USD", "ETH.USD");
+List<String> symbols = Arrays.asList("BTC.USD", "ETH.USD");
 QuoteTimelineRequest request = QuoteTimelineRequest.newCcRequest(symbols,
     System.currentTimeMillis() - 60 * 60 * 1000);
 QuoteTimelineResponse response = client.execute(request);
@@ -1103,7 +1103,7 @@ WarrantFilterResponse response = client.execute(request);
 **请求类：WarrantQuoteRequest**
 
 ```java
-List<String> symbols = List.of("68723", "68722");
+List<String> symbols = Arrays.asList("68723", "68722");
 WarrantQuoteRequest request = WarrantQuoteRequest.newRequest(symbols);
 request.lang(Language.zh_CN);
 WarrantQuoteResponse response = client.execute(request);
@@ -1130,7 +1130,7 @@ baseFilterList.add(BaseFilter.builder()
     .build());
 
 // 多标签指标
-List<String> conceptTagList = List.of("BK1549", "BK1541", "BK1545", "BK1512");
+List<String> conceptTagList = Arrays.asList("BK1549", "BK1541", "BK1545", "BK1512");
 List<MultiTagsRelationFilter> multiTagsRelationFilter = new ArrayList<>();
 multiTagsRelationFilter.add(MultiTagsRelationFilter.builder()
     .fieldName(MultiTagField.MultiTagField_Concept)
@@ -1229,7 +1229,7 @@ public enum SortDir {
 // package_us_v1_etf_volatility (波动率), package_us_v1_etf_currency (汇率型),
 // package_us_v1_etf_alternative (另类投资)
 
-List<String> etfTagList = List.of("package_us_v1_etf_hot");
+List<String> etfTagList = Arrays.asList("package_us_v1_etf_hot");
 List<MultiTagsRelationFilter> multiTagsRelationFilter = new ArrayList<>();
 multiTagsRelationFilter.add(MultiTagsRelationFilter.builder()
     .fieldName(MultiTagField.MultiTagField_ETF_TYPE)
@@ -1270,7 +1270,7 @@ MarketIndicatorValue {
 **请求类：MarketScannerTagsRequest**
 
 ```java
-List<MultiTagField> multiTagFieldList = List.of(MultiTagField.MultiTagField_Industry);
+List<MultiTagField> multiTagFieldList = Arrays.asList(MultiTagField.MultiTagField_Industry);
 MarketScannerTagsRequest request = MarketScannerTagsRequest.newRequest(Market.HK, multiTagFieldList);
 MarketScannerTagsResponse response = client.execute(request);
 // response.getItems() -> List<MarketScannerTagItem>
@@ -1293,7 +1293,7 @@ Date beginDate = Date.from(LocalDate.parse("2023-01-01")
     .atStartOfDay(ZoneId.of("America/New_York")).toInstant());
 Date endDate = Date.from(LocalDate.parse("2025-10-02")
     .atStartOfDay(ZoneId.of("America/New_York")).toInstant());
-List<String> symbols = List.of("NVDA");
+List<String> symbols = Arrays.asList("NVDA");
 CorporateSplitRequest request = CorporateSplitRequest.newRequest(symbols, Market.US, beginDate, endDate);
 CorporateSplitResponse response = client.execute(request);
 ```
@@ -1329,7 +1329,7 @@ Date beginDate = Date.from(LocalDate.parse("2025-01-01")
     .atStartOfDay(ZoneId.of("America/New_York")).toInstant());
 Date endDate = Date.from(LocalDate.parse("2025-10-27")
     .atStartOfDay(ZoneId.of("America/New_York")).toInstant());
-List<String> symbols = List.of("AAPL");
+List<String> symbols = Arrays.asList("AAPL");
 CorporateDividendRequest request = CorporateDividendRequest.newRequest(symbols, Market.US, beginDate, endDate);
 CorporateDividendResponse response = client.execute(request);
 ```
@@ -1377,6 +1377,62 @@ CorporateEarningResponse response = client.execute(request);
 
 ---
 
+### 代码变更 / Symbol Change（SDK 2.6.0+）
+
+**请求类：CorporateSymbolChangeRequest**
+
+```java
+List<String> scSymbols = Arrays.asList("META");
+Date scBegin = Date.from(LocalDate.parse("2022-01-01")
+    .atStartOfDay(ZoneId.of("America/New_York")).toInstant());
+Date scEnd = Date.from(LocalDate.parse("2023-01-01")
+    .atStartOfDay(ZoneId.of("America/New_York")).toInstant());
+
+CorporateSymbolChangeResponse scResp = client.execute(
+    CorporateSymbolChangeRequest.newRequest(scSymbols, Market.US, scBegin, scEnd));
+
+// 返回按 symbol 分组的 Map，不是扁平列表
+Map<String, List<CorporateSymbolChangeItem>> scItems = scResp.getItems();
+for (List<CorporateSymbolChangeItem> group : scItems.values()) {
+  for (CorporateSymbolChangeItem item : group) {
+    System.out.println(item.getOldSymbol() + " -> " + item.getNewSymbol());
+  }
+}
+```
+
+### 退市事件 / Delisting（SDK 2.6.0+）
+
+**请求类：CorporateDelistingRequest**
+
+```java
+CorporateDelistingResponse dlResp = client.execute(
+    CorporateDelistingRequest.newRequest(Arrays.asList("AAPL"), Market.US, null, null));
+Map<String, List<CorporateDelistingItem>> dlItems = dlResp.getItems();
+```
+
+### 新股上市 / IPO（SDK 2.6.0+）
+
+**请求类：CorporateIpoRequest**
+
+```java
+CorporateIpoResponse ipoResp = client.execute(
+    CorporateIpoRequest.newRequest(Arrays.asList("AAPL"), Market.US, null, null));
+Map<String, List<CorporateIpoItem>> ipoItems = ipoResp.getItems();
+```
+
+三个请求类的签名完全一致：`newRequest(List<String> symbols, Market market, Date beginDate, Date endDate)`，
+内部共用 `MethodName.CORPORATE_ACTION`，仅 `actionType` 不同。
+All three share one signature and the `CORPORATE_ACTION` method, differing only in action type.
+
+`CorporateActionType` 共 6 个值 / 6 values：`SPLIT`、`DIVIDEND`、`EARNING`、
+`SYMBOL_CHANGE`、`DELISTING`、`IPO`（后三个为 2.6.0 新增）。
+
+> 这三个响应的 `getItems()` 返回 **`Map<String, List<XxxItem>>`**（按 symbol 分组），
+> 不是 `List`。
+> These three return a symbol-keyed `Map`, not a flat `List`.
+
+---
+
 ## 财务报告 / Financial Reports
 
 **请求类：FinancialReportRequest**
@@ -1384,8 +1440,8 @@ CorporateEarningResponse response = client.execute(request);
 需要财报权限，需联系管理员单独开通。
 
 ```java
-List<String> symbols = List.of("TIGR");
-List<String> fields = List.of(
+List<String> symbols = Arrays.asList("TIGR");
+List<String> fields = Arrays.asList(
     FinancialReportField.totalAssets.getField(),
     FinancialReportField.totalAssetTurnover.getField());
 FinancialReportRequest request = FinancialReportRequest.newRequest(symbols, fields);

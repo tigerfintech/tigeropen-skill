@@ -7,10 +7,10 @@
 
 > ⚠️ **默认使用模拟账户。Default to Paper Trading.**
 
-实盘下单前，**必须执行**以下流程：
-1. 与用户确认：标的代码、方向（买/卖）、数量、价格、账户
-2. 先调用 `preview_order()` 查看预估佣金和保证金
-3. 用户确认后再调用 `place_order()`
+实盘下单前，**每步均为必须，缺少任何步骤不得下单**：
+1. 调用 `preview_order()` 查看预估佣金和保证金，展示给用户
+2. 将订单详情（标的、方向、数量、价格、账户、预估佣金）以表格展示，**停止等待用户明确确认**；未收到确认前**禁止调用 `place_order()`**
+3. 用户确认后调用 `place_order()`
 4. 下单后通过 `get_orders()` 确认订单状态
 
 ---
@@ -64,15 +64,19 @@ Contract fut = ContractUtil::future_contract(U("CL2509"), U("USD"));
 <!-- OrderUtil 是构造 Order 对象的工厂 -->
 
 ```cpp
-// 限价单 / Limit order
+utility::string_t account = config.account;
+
+// 限价单 / Limit order（limit_order 有不带 account 的重载）
 Order lmt_order = OrderUtil::limit_order(stock, U("BUY"), 100, 150.0);
 
 // 市价单 / Market order
-Order mkt_order = OrderUtil::market_order(stock, U("BUY"), 100);
+Order mkt_order = OrderUtil::market_order(account, stock, U("BUY"), 100);
 
 // 止损限价单 / Stop-limit order
-Order stp_lmt = OrderUtil::stop_limit_order(stock, U("SELL"), 100, 145.0, 148.0);
-// 参数: contract, action, qty, limitPrice, auxPrice(触发价)
+Order stp_lmt = OrderUtil::stop_limit_order(account, stock, U("SELL"), 100, 145.0, 148.0);
+// 参数: account, contract, action, qty, limitPrice, auxPrice(触发价)
+// ⚠️ 除 limit_order 外，其他 OrderUtil 工厂方法【都必须】传 account 作为第一个参数
+// Only limit_order has an account-less overload; all other factories require account first.
 
 // 盘后交易 / After-hours
 lmt_order.outside_rth = true;

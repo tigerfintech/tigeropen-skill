@@ -115,7 +115,7 @@ cp -r /tmp/tigeropen-skill/skills/tigeropen-java .claude/skills/
 ### 前置条件
 
 1. **Python SDK**: `pip install tigeropen` (Python 3.8+)
-2. **Java SDK**: Maven 依赖 `com.tigerbrokers:openapi-java-sdk` (JDK 1.7+)
+2. **Java SDK**: Maven 依赖 `io.github.tigerbrokers:openapi-java-sdk` (JDK 1.8+)
 3. 老虎证券账户和 API 权限（[开发者页面](https://developer.itigerup.com/)）
 4. 准备好 `tiger_id`、私钥文件和 `account`
 
@@ -259,7 +259,7 @@ After installing, use natural language:
 ### Prerequisites
 
 1. **Python SDK**: `pip install tigeropen` (Python 3.8+)
-2. **Java SDK**: Maven dependency `com.tigerbrokers:openapi-java-sdk` (JDK 1.7+)
+2. **Java SDK**: Maven dependency `io.github.tigerbrokers:openapi-java-sdk` (JDK 1.8+)
 3. Tiger Brokers account with API access ([Developer Page](https://developer.itigerup.com/))
 4. Have your `tiger_id`, private key file, and `account` ready
 

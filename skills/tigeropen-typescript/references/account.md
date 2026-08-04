@@ -7,34 +7,41 @@
 ## 初始化 / Initialize
 
 ```typescript
-import { createClientConfig } from 'tigeropen';
-import { HttpClient } from 'tigeropen/dist/esm/client/http-client.js';
-import { TradeClient } from 'tigeropen/dist/esm/trade/trade-client.js';
+import {
+  createClientConfig,
+  HttpClient,
+  TradeClient,
+} from '@tigeropenapi/tigeropen';
 
 const config = createClientConfig({
   propertiesFilePath: 'tiger_openapi_config.properties',
 });
-
 const httpClient = new HttpClient(config);
 const tc = new TradeClient(httpClient, config.account);
 ```
+
+> **约定 / Conventions**
+> - 方法以 `get` 开头，接收**请求对象**（字段多为可选）；返回**强类型对象**
+> - 单值接口返回 `T | undefined`，需判空
+> - `account` 省略时使用客户端默认账户
+> - Methods are `getX`, take an optional request object, and return typed values.
 
 ---
 
 ## 账户列表 / Account List
 
 ```typescript
-// 不传 account 返回所有账号（综合、环球、模拟）
-// Omit account to return all accounts
-const result = await tc.accounts({});
-console.log(result);
-
-// 返回字段 / Response fields:
-// account     - 账户号（综合5~10位数字，模拟17位，环球以U开头）
-// capability  - CASH / RegTMargin / PMGRN
-// status      - Funded / Open / Pending / Rejected / Closed
-// accountType - STANDARD / GLOBAL / PAPER
+const accounts = await tc.getManagedAccounts();
 ```
+
+返回 `ManagedAccount[]`。字段说明 / Fields:
+- 账户号（综合 5~10 位数字，模拟 17 位，环球以 U 开头）
+- `capability` — `CASH`（现金）/ `RegTMargin`（保证金）/ `PMGRN`（组合保证金）
+- `status` — `Funded` / `Open` / `Pending` / `Rejected` / `Closed`
+- 账户类型 — `STANDARD` / `GLOBAL` / `PAPER`
+
+> 方法名是 `getManagedAccounts`，**没有** `accounts()` 方法。
+> The method is `getManagedAccounts`; there is no `accounts()`.
 
 ---
 
@@ -43,85 +50,60 @@ console.log(result);
 ### 环球账户 / Global Account
 
 ```typescript
-const result = await tc.assets({
-  account: 'DU000001',
-  segment: true,       // 按证券/期货分类
-  market_value: true   // 按市场分市值（仅环球账户）
+const assets = await tc.getAssets({
+  segment: true,      // 按证券/期货分类
+  marketValue: true,  // 按市场分市值（仅环球账户）
 });
-
-// 主要返回字段 / Key response fields:
-// netLiquidation  - 净清算值
-// availableFunds  - 可用资金
-// buyingPower     - 购买力
-// cashValue       - 现金
-// initMarginReq   - 初始保证金要求
-// maintMarginReq  - 维持保证金要求
-// unrealizedPnl   - 浮动盈亏
-// realizedPnl     - 已实现盈亏
-// segments        - 按交易品种（S=证券, C=期货）分类
-// marketValues    - 按市场（USD/HKD）分类
 ```
+
+返回 `Asset[]`。主要字段：净清算值、可用资金、购买力、现金、
+初始/维持保证金要求、浮动与已实现盈亏、按品种分类的 `segments`。
 
 ### 综合/模拟账号 / Standard/Paper Account
 
 ```typescript
-const result = await tc.primeAssets({
-  account: '123456',
-  base_currency: 'USD',
-  consolidated: true   // SEC+FUND聚合显示
-});
-
-// segments 数组主要字段 / Segment key fields:
-// category              - S（证券）/ C（期货）/ F（基金）/ D（数字货币）
-// capability            - RegTMargin / Cash
-// buyingPower           - 最大购买力（保证金账户日内4倍，隔夜2倍）
-// cashAvailableForTrade - 可用资金
-// cashBalance           - 现金余额
-// netLiquidation        - 净清算值
-// initMargin            - 初始保证金
-// maintainMargin        - 维持保证金（低于此值会强平）
-// unrealizedPL          - 浮动盈亏
-// currencyAssets        - 按币种（USD/HKD/SGD/CNH）细分
+// 返回 PrimeAsset | undefined，需判空
+const prime = await tc.getPrimeAssets({ segment: true });
+if (prime) {
+  console.log(prime);
+}
 ```
+
+`segments` 主要字段：
+- `category` — S（证券）/ C（期货）/ F（基金）/ D（数字货币）
+- `capability` — RegTMargin / Cash
+- 购买力、可用资金、现金余额、净清算值
+- 初始保证金、维持保证金（低于此值会强平）
+- 浮动盈亏、按币种（USD/HKD/SGD/CNH）细分
+
+> `AssetsRequest` 只有 `account`、`secretKey`、`subAccounts`、`segment`、
+> `marketValue`、`lang` 六个字段，**没有** `baseCurrency` / `consolidated`。
 
 ---
 
 ## 账户持仓 / Account Positions
 
 ```typescript
-const result = await tc.positions({
-  account: '123456',
-  sec_type: 'STK',   // STK/OPT/FUT，默认STK
-  currency: 'ALL',   // ALL/USD/HKD/CNH
-  market: 'ALL'      // ALL/US/HK/CN
+const positions = await tc.getPositions({
+  secType: 'STK',   // STK/OPT/FUT，默认 STK
+  currency: 'ALL',  // ALL/USD/HKD/CNH
+  market: 'ALL',    // ALL/US/HK/CN
 });
 
-if (Array.isArray(result)) {
-  result.forEach(pos => {
-    console.log(`${pos.symbol}: qty=${pos.positionQty}, pnl=${pos.unrealizedPnl}`);
-  });
+for (const p of positions) {
+  console.log(p.symbol, p.positionQty, p.averageCost, p.marketValue, p.unrealizedPnl);
 }
-
-// 主要持仓字段 / Key position fields:
-// symbol        - 股票代码
-// positionQty   - 持仓数量
-// averageCost   - 平均成本（FIFO）
-// marketValue   - 市值
-// unrealizedPnl - 浮动盈亏
-// secType       - 证券类型
-// market        - 市场
-// currency      - 币种
 ```
+
+返回 `Position[]`。常用字段：`symbol`、`secType`、`market`、`currency`、
+`positionQty`（持仓数量）、`averageCost`（平均成本）、`marketValue`、
+`realizedPnl`、`unrealizedPnl`。
 
 ### 期权持仓 / Option Positions
 
 ```typescript
-const result = await tc.positions({
-  account: '123456',
-  sec_type: 'OPT'
-});
-// 期权持仓额外字段 / Option-specific fields:
-// strike - 行权价, expiry - 到期日, right - CALL/PUT
+const optPositions = await tc.getPositions({ secType: 'OPT' });
+// 期权持仓额外字段 / Option-specific fields: strike, expiry, right
 ```
 
 ---
@@ -129,51 +111,35 @@ const result = await tc.positions({
 ## 历史资产分析 / Asset Analytics (PnL History)
 
 ```typescript
-const result = await tc.primeAnalyticsAsset({
-  account: '123456',
-  start_date: '2024-01-01',
-  end_date: '2024-01-31',
-  seg_type: 'SEC',   // SEC / FUT
-  currency: 'USD'
+const analytics = await tc.getAnalyticsAsset({
+  startDate: '2026-01-01',   // YYYY-MM-DD
+  endDate: '2026-01-31',
+  segType: 'SEC',            // SEC / FUT
 });
-
-// summary 字段 / Summary fields:
-// pnl                - 盈亏金额
-// pnlPercentage      - 收益率
-// annualizedReturn   - 年化收益率
-
-// history 数组每项字段 / History item fields:
-// date               - 日期时间戳（毫秒）
-// asset              - 总资产
-// pnl                - 当日盈亏
-// cashBalance        - 现金余额
-// grossPositionValue - 持仓市值
-// deposit            - 入金
-// withdrawal         - 出金
 ```
+
+> 方法名是 `getAnalyticsAsset`，**不是** `primeAnalyticsAsset`。
+> `AnalyticsAssetRequest` 没有 `currency` 字段。
+
+返回内容包含汇总（盈亏金额、收益率、年化收益率）与按日历史
+（日期毫秒时间戳、总资产、当日盈亏、现金余额、持仓市值、入金、出金）。
 
 ---
 
 ## 最大可交易数量 / Estimate Tradable Quantity
 
 ```typescript
-const result = await tc.estimateTradableQuantity({
-  account: '123456',
+const qty = await tc.getEstimateTradableQuantity({
   symbol: 'AAPL',
-  sec_type: 'STK',
+  secType: 'STK',
   action: 'BUY',
-  order_type: 'LMT',
-  limit_price: 150.0
+  orderType: 'LMT',
+  limitPrice: 150.0,
 });
-
-console.log(`Can buy: ${result?.tradableQuantity} shares`);
-
-// 返回字段 / Response fields:
-// tradableQuantity          - 现金可买/卖数量
-// financingQuantity         - 融资融券可买/卖数量
-// positionQuantity          - 持仓数量
-// tradablePositionQuantity  - 持仓可交易数量
 ```
+
+返回 `EstimateTradableQuantity | undefined`，含现金可买/卖数量、
+融资融券可买/卖数量、持仓数量与持仓可交易数量。
 
 ---
 
@@ -182,59 +148,97 @@ console.log(`Can buy: ${result?.tradableQuantity} shares`);
 ### 查询可转出金额 / Query Available Amount
 
 ```typescript
-const result = await tc.segmentFundAvailable({
-  account: '123456',
-  from_segment: 'SEC',   // SEC / FUT
-  currency: 'USD'
+const avail = await tc.getSegmentFundAvailable({
+  fromSegment: 'SEC',   // SEC / FUT
+  currency: 'USD',
 });
-// 返回 fromSegment, currency, amount
 ```
 
 ### 发起转账 / Transfer
 
 ```typescript
-const result = await tc.segmentFundTransfer({
-  account: '123456',
-  from_segment: 'SEC',
-  to_segment: 'FUT',
+// 返回 SegmentFund | undefined
+const transferred = await tc.transferSegmentFund({
+  fromSegment: 'SEC',
+  toSegment: 'FUT',
   currency: 'USD',
-  amount: 1000.0
+  amount: 1000,
 });
 // 转账状态 status: NEW / PROC / SUCC / FAIL / CANC
 ```
 
----
+> 方法名是 `transferSegmentFund`（动词在前），**不是** `segmentFundTransfer`。
 
-## 出入金记录 / Deposit & Withdrawal Records
+### 撤销转账与历史 / Cancel & History
 
 ```typescript
-const result = await tc.depositWithdraw({
-  account: '123456'
+const fundCancelled = await tc.cancelSegmentFund({ id: 'transfer_id' });
+const fundHistory = await tc.getSegmentFundHistory({ limit: 20 });
+```
+
+> `SegmentFundRequest.id` 是 `string`，不是数字。
+
+---
+
+## 出入金记录 / Funding Records
+
+SDK **没有** `depositWithdraw` 方法，用以下两个接口 / There is no `depositWithdraw`; use:
+
+```typescript
+const funding = await tc.getFundingHistory({
+  segType: 'SEC',
+  currency: 'USD',
+  limit: 20,
 });
 
-if (Array.isArray(result)) {
-  result.forEach(r => {
-    console.log(`${r.typeDesc}: ${r.currency} ${r.amount} on ${r.businessDate}`);
-  });
-}
+const fundDetails = await tc.getFundDetails({
+  segTypes: ['SEC'],
+  currency: 'USD',
+  startDate: 1767225600000,   // 毫秒时间戳
+  endDate: 1769904000000,
+  limit: 50,
+});
+```
 
-// 每条记录字段 / Record fields:
-// type         - 1(入金) / 3(出金) / 20(出金费用) 等
-// typeDesc     - 类型描述
-// currency     - 币种
-// amount       - 金额
-// businessDate - 业务日期
-// completedStatus - 是否完成
+> `FundDetailsRequest` / `FundingHistoryRequest` 的 `startDate`/`endDate`
+> 是**毫秒时间戳（number）**，不是日期字符串。
+
+---
+
+## 聚合资产与持仓转移 / Aggregate Assets & Position Transfer
+
+```typescript
+// 返回 AggregateAssets | undefined
+const aggregate = await tc.getAggregateAssets();
+
+// 持仓转移：toAccount 与 transfers 是必填字段
+const transferred2 = await tc.transferPosition({
+  fromAccount: 'A',
+  toAccount: 'B',
+  transfers: [{ symbol: 'AAPL', quantity: 100, secType: 'STK' }],
+});
+```
+
+---
+
+## 直接调用 API / Raw API Call
+
+```typescript
+const raw = await httpClient.execute('accounts', JSON.stringify({}));
+console.log(raw);
 ```
 
 ---
 
 ## 注意事项 / Notes
 
-- 环球账户(Global)用 `assets()`，综合/模拟账户(Standard/Paper)用 `primeAssets()`
+- 环球账户(Global)用 `getAssets()`，综合/模拟账户(Standard/Paper)用 `getPrimeAssets()`
 - Segment 分类：S=证券, C=期货, F=基金, D=数字货币
-- 持仓使用 `positionQty` 字段，旧字段 `position`+`positionScale` 已废弃
-- `maintainMargin` 低于 0 时会触发强制平仓
-- 机构用户额外传 `secret_key` 字段
-- 所有方法均为 async，需要 `await`
-- 子路径导入需使用 `tigeropen/dist/esm/...` 路径（参见 quickstart.md）
+- 所有方法都是 `async`；返回强类型对象，不需要 `JSON.parse`
+- 单值接口（`getPrimeAssets`、`transferSegmentFund`、`cancelSegmentFund`、
+  `getAggregateAssets`、`getEstimateTradableQuantity`、`transferPosition`）
+  返回 `T | undefined`，需判空
+- 维持保证金低于 0 时会触发强制平仓
+- 机构用户在 `new TradeClient(httpClient, account, secretKey)` 传入 secret key，
+  或在单个请求上设置 `secretKey` 覆盖
+- 从包根路径 `@tigeropenapi/tigeropen` 导入所有 API，不要用子路径

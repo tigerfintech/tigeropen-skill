@@ -8,40 +8,39 @@
 
 ```rust
 use tigeropen::config::ClientConfig;
-use tigeropen::client::http_client::HttpClient;
+use tigeropen::model::trade_requests::*;
 use tigeropen::trade::TradeClient;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = ClientConfig::builder()
-        .properties_file("tiger_openapi_config.properties")
-        .build()?;
-
-    let http_client = HttpClient::new(config.clone())?;
-    let tc = TradeClient::new(&http_client, &config.account);
-    Ok(())
-}
+let config = ClientConfig::builder()
+    .properties_file("tiger_openapi_config.properties")
+    .build()?;
+let tc = TradeClient::from_config(config.clone());
 ```
+
+> **约定 / Conventions**
+> - 方法接收 `XxxRequest` 结构体（字段为 `Option<T>`），用 `..Default::default()` 补齐
+> - 返回**强类型结构体**；单值接口返回 `Option<T>`，需判空
+> - `account` 留空时 SDK 自动填入客户端账户
+> - Methods take typed request structs with `Option<T>` fields; single-value APIs return `Option<T>`.
 
 ---
 
 ## 账户列表 / Account List
 
 ```rust
-// 不传 account 返回所有账号（综合、环球、模拟）
-// Omit account to return all accounts
-let result = tc.accounts(None).await?;
-
-if let Some(data) = result {
-    println!("{}", serde_json::to_string_pretty(&data)?);
-}
-
-// 返回字段 / Response fields:
-// account     - 账户号（综合5~10位数字，模拟17位，环球以U开头）
-// capability  - CASH / RegTMargin / PMGRN
-// status      - Funded / Open / Pending / Rejected / Closed
-// accountType - STANDARD / GLOBAL / PAPER
+let accounts = tc
+    .get_managed_accounts(ManagedAccountsRequest::default())
+    .await?;
 ```
+
+返回 `Vec<ManagedAccount>`。字段说明 / Fields:
+- 账户号（综合 5~10 位数字，模拟 17 位，环球以 U 开头）
+- `capability` — `CASH`（现金）/ `RegTMargin`（保证金）/ `PMGRN`（组合保证金）
+- `status` — `Funded` / `Open` / `Pending` / `Rejected` / `Closed`
+- 账户类型 — `STANDARD` / `GLOBAL` / `PAPER`
+
+> 方法名是 `get_managed_accounts`，**没有** `accounts()` 方法。
+> The method is `get_managed_accounts`; there is no `accounts()`.
 
 ---
 
@@ -50,98 +49,75 @@ if let Some(data) = result {
 ### 环球账户 / Global Account
 
 ```rust
-use serde_json::json;
-
-let result = tc.assets(json!({
-    "account": "DU000001",
-    "segment": true,       // 按证券/期货分类
-    "market_value": true   // 按市场分市值（仅环球账户）
-})).await?;
-
-if let Some(data) = result {
-    println!("{}", serde_json::to_string_pretty(&data)?);
-}
-
-// 主要返回字段 / Key response fields:
-// netLiquidation  - 净清算值
-// availableFunds  - 可用资金
-// buyingPower     - 购买力
-// cashValue       - 现金
-// initMarginReq   - 初始保证金要求
-// maintMarginReq  - 维持保证金要求
-// unrealizedPnl   - 浮动盈亏
-// realizedPnl     - 已实现盈亏
-// segments        - 按交易品种（S=证券, C=期货）分类
-// marketValues    - 按市场（USD/HKD）分类
+let assets = tc
+    .get_assets(AssetsRequest {
+        segment: Some(true),      // 按证券/期货分类
+        market_value: Some(true), // 按市场分市值（仅环球账户）
+        ..Default::default()
+    })
+    .await?;
 ```
+
+返回 `Vec<Asset>`。主要字段：净清算值、可用资金、购买力、现金、
+初始/维持保证金要求、浮动与已实现盈亏、按品种分类的 segments。
 
 ### 综合/模拟账号 / Standard/Paper Account
 
 ```rust
-let result = tc.prime_assets(json!({
-    "account": "123456",
-    "base_currency": "USD",
-    "consolidated": true   // SEC+FUND聚合显示
-})).await?;
-
-if let Some(data) = result {
-    println!("{}", serde_json::to_string_pretty(&data)?);
+// 返回 Option，需判空
+if let Some(prime) = tc
+    .get_prime_assets(AssetsRequest {
+        segment: Some(true),
+        ..Default::default()
+    })
+    .await?
+{
+    println!("{:?}", prime);
 }
-
-// segments 数组主要字段 / Segment key fields:
-// category              - S（证券）/ C（期货）/ F（基金）/ D（数字货币）
-// capability            - RegTMargin / Cash
-// buyingPower           - 最大购买力（保证金账户日内4倍，隔夜2倍）
-// cashAvailableForTrade - 可用资金
-// cashBalance           - 现金余额
-// netLiquidation        - 净清算值
-// initMargin            - 初始保证金
-// maintainMargin        - 维持保证金（低于此值会强平）
-// unrealizedPL          - 浮动盈亏
-// currencyAssets        - 按币种（USD/HKD/SGD/CNH）细分
 ```
+
+`segments` 主要字段：
+- `category` — S（证券）/ C（期货）/ F（基金）/ D（数字货币）
+- `capability` — RegTMargin / Cash
+- 购买力、可用资金、现金余额、净清算值
+- 初始保证金、维持保证金（低于此值会强平）
+- 浮动盈亏、按币种（USD/HKD/SGD/CNH）细分
 
 ---
 
 ## 账户持仓 / Account Positions
 
 ```rust
-let result = tc.positions(json!({
-    "account": "123456",
-    "sec_type": "STK",   // STK/OPT/FUT，默认STK
-    "currency": "ALL",   // ALL/USD/HKD/CNH
-    "market": "ALL"      // ALL/US/HK/CN
-})).await?;
+let positions = tc
+    .get_positions(PositionsRequest {
+        sec_type: Some("STK".to_string()),  // STK/OPT/FUT，默认 STK
+        currency: Some("ALL".to_string()),  // ALL/USD/HKD/CNH
+        market: Some("ALL".to_string()),    // ALL/US/HK/CN
+        ..Default::default()
+    })
+    .await?;
 
-if let Some(data) = result {
-    if let Some(items) = data.as_array() {
-        for item in items {
-            println!("symbol: {}, qty: {}, pnl: {}",
-                item["symbol"], item["positionQty"], item["unrealizedPnl"]);
-        }
-    }
+for p in &positions {
+    // 字段均为 Option<T>
+    println!(
+        "{:?} position={:?} cost={:?} mktValue={:?}",
+        p.symbol, p.position, p.average_cost, p.market_value
+    );
 }
-
-// 主要持仓字段 / Key position fields:
-// symbol        - 股票代码
-// positionQty   - 持仓数量
-// averageCost   - 平均成本（FIFO）
-// marketValue   - 市值
-// unrealizedPnl - 浮动盈亏
-// secType       - 证券类型
-// market        - 市场
-// currency      - 币种
 ```
+
+返回 `Vec<Position>`，字段均为 `Option<T>`：`symbol`、`sec_type`、`market`、
+`currency`、`position`、`average_cost`、`market_value` 等。
 
 ### 期权持仓 / Option Positions
 
 ```rust
-let result = tc.positions(json!({
-    "account": "123456",
-    "sec_type": "OPT"
-})).await?;
-// 期权持仓额外字段 / Option-specific fields:
-// strike - 行权价, expiry - 到期日, right - CALL/PUT
+let opt_positions = tc
+    .get_positions(PositionsRequest {
+        sec_type: Some("OPT".to_string()),
+        ..Default::default()
+    })
+    .await?;
 ```
 
 ---
@@ -149,57 +125,40 @@ let result = tc.positions(json!({
 ## 历史资产分析 / Asset Analytics (PnL History)
 
 ```rust
-let result = tc.prime_analytics_asset(json!({
-    "account": "123456",
-    "start_date": "2024-01-01",
-    "end_date": "2024-01-31",
-    "seg_type": "SEC",   // SEC / FUT
-    "currency": "USD"
-})).await?;
-
-if let Some(data) = result {
-    println!("{}", serde_json::to_string_pretty(&data)?);
-}
-
-// summary 字段 / Summary fields:
-// pnl                - 盈亏金额
-// pnlPercentage      - 收益率
-// annualizedReturn   - 年化收益率
-
-// history 数组每项字段 / History item fields:
-// date               - 日期时间戳（毫秒）
-// asset              - 总资产
-// pnl                - 当日盈亏
-// cashBalance        - 现金余额
-// grossPositionValue - 持仓市值
-// deposit            - 入金
-// withdrawal         - 出金
+let analytics = tc
+    .get_analytics_asset(AnalyticsAssetRequest {
+        start_date: Some("2026-01-01".to_string()),
+        end_date: Some("2026-01-31".to_string()),
+        seg_type: Some("SEC".to_string()),  // SEC / FUT
+        ..Default::default()
+    })
+    .await?;
 ```
+
+> 方法名是 `get_analytics_asset`，**不是** `prime_analytics_asset`。
+> The method is `get_analytics_asset`.
+
+返回内容包含汇总（盈亏金额、收益率、年化收益率）与按日历史
+（日期毫秒时间戳、总资产、当日盈亏、现金余额、持仓市值、入金、出金）。
 
 ---
 
 ## 最大可交易数量 / Estimate Tradable Quantity
 
 ```rust
-let result = tc.estimate_tradable_quantity(json!({
-    "account": "123456",
-    "symbol": "AAPL",
-    "sec_type": "STK",
-    "action": "BUY",
-    "order_type": "LMT",
-    "limit_price": 150.0
-})).await?;
-
-if let Some(data) = result {
-    println!("tradable: {}", data["tradableQuantity"]);
-}
-
-// 返回字段 / Response fields:
-// tradableQuantity          - 现金可买/卖数量
-// financingQuantity         - 融资融券可买/卖数量
-// positionQuantity          - 持仓数量
-// tradablePositionQuantity  - 持仓可交易数量
+let qty = tc
+    .get_estimate_tradable_quantity(EstimateTradableQuantityRequest {
+        symbol: Some("AAPL".to_string()),
+        sec_type: Some("STK".to_string()),
+        action: Some("BUY".to_string()),
+        order_type: Some("LMT".to_string()),
+        limit_price: Some(150.0),
+        ..Default::default()
+    })
+    .await?;
 ```
+
+返回现金可买/卖数量、融资融券可买/卖数量、持仓数量与持仓可交易数量。
 
 ---
 
@@ -208,61 +167,104 @@ if let Some(data) = result {
 ### 查询可转出金额 / Query Available Amount
 
 ```rust
-let result = tc.segment_fund_available(json!({
-    "account": "123456",
-    "from_segment": "SEC",   // SEC / FUT
-    "currency": "USD"
-})).await?;
-// 返回 fromSegment, currency, amount
+let avail = tc
+    .get_segment_fund_available(SegmentFundRequest {
+        from_segment: Some("SEC".to_string()),  // SEC / FUT
+        currency: Some("USD".to_string()),
+        ..Default::default()
+    })
+    .await?;
 ```
 
 ### 发起转账 / Transfer
 
 ```rust
-let result = tc.segment_fund_transfer(json!({
-    "account": "123456",
-    "from_segment": "SEC",
-    "to_segment": "FUT",
-    "currency": "USD",
-    "amount": 1000.0
-})).await?;
+// 返回 Option，需判空
+if let Some(result) = tc
+    .transfer_segment_fund(SegmentFundRequest {
+        from_segment: Some("SEC".to_string()),
+        to_segment: Some("FUT".to_string()),
+        currency: Some("USD".to_string()),
+        amount: Some(1000.0),
+        ..Default::default()
+    })
+    .await?
+{
+    println!("{:?}", result);
+}
 // 转账状态 status: NEW / PROC / SUCC / FAIL / CANC
+```
+
+> 方法名是 `transfer_segment_fund`（动词在前），**不是** `segment_fund_transfer`。
+> The method is `transfer_segment_fund`.
+
+### 撤销转账与历史 / Cancel & History
+
+```rust
+let cancelled = tc
+    .cancel_segment_fund(SegmentFundRequest {
+        id: Some("transfer_id".to_string()),
+        ..Default::default()
+    })
+    .await?;
+
+let history = tc
+    .get_segment_fund_history(SegmentFundRequest {
+        limit: Some(20),
+        ..Default::default()
+    })
+    .await?;
 ```
 
 ---
 
-## 出入金记录 / Deposit & Withdrawal Records
+## 出入金记录 / Funding Records
+
+SDK **没有** `deposit_withdraw` 方法，用以下两个接口 / There is no `deposit_withdraw`; use:
 
 ```rust
-let result = tc.deposit_withdraw(json!({
-    "account": "123456"
-})).await?;
+let funding = tc
+    .get_funding_history(FundingHistoryRequest {
+        seg_type: Some("SEC".to_string()),
+        ..Default::default()
+    })
+    .await?;
 
-if let Some(data) = result {
-    if let Some(records) = data.as_array() {
-        for r in records {
-            println!("type: {}, amount: {}, date: {}",
-                r["typeDesc"], r["amount"], r["businessDate"]);
-        }
-    }
+let details = tc
+    .get_fund_details(FundDetailsRequest {
+        currency: Some("USD".to_string()),
+        limit: Some(50),
+        ..Default::default()
+    })
+    .await?;
+```
+
+---
+
+## 聚合资产与持仓转移 / Aggregate Assets & Position Transfer
+
+```rust
+// 聚合资产（返回 Option）
+if let Some(agg) = tc
+    .get_aggregate_assets(AggregateAssetsRequest::default())
+    .await?
+{
+    println!("{:?}", agg);
 }
 
-// 每条记录字段 / Record fields:
-// type         - 1(入金) / 3(出金) / 20(出金费用) 等
-// typeDesc     - 类型描述
-// currency     - 币种
-// amount       - 金额
-// businessDate - 业务日期
+// 持仓转移记录
+let transfer_records = tc
+    .get_position_transfer_records(PositionTransferRecordsRequest::default())
+    .await?;
 ```
 
 ---
 
 ## 注意事项 / Notes
 
-- 所有方法返回 `Result<Option<serde_json::Value>, TigerError>`，需 `await` 且处理错误
-- 环球账户(Global)用 `assets()`，综合/模拟账户(Standard/Paper)用 `prime_assets()`
+- 环球账户(Global)用 `get_assets()`，综合/模拟账户(Standard/Paper)用 `get_prime_assets()`
 - Segment 分类：S=证券, C=期货, F=基金, D=数字货币
-- 持仓使用 `positionQty` 字段，旧字段 `position`+`positionScale` 已废弃
-- `maintainMargin` 低于 0 时会触发强制平仓
-- 机构用户额外传 `"secret_key"` 字段
-- 必须在 tokio 运行时中使用（`#[tokio::main]`）
+- 所有方法都是 `async`，请求结构体字段是 `Option<T>`，用 `..Default::default()` 补齐
+- 单值接口（`get_prime_assets`、`transfer_segment_fund`、`get_aggregate_assets`）返回 `Option<T>`，需判空
+- 维持保证金低于 0 时会触发强制平仓
+- 机构用户用 `TradeClient::with_secret_key(...)` 构造客户端，或在请求上设置 `secret_key`

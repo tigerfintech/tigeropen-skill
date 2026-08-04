@@ -1,21 +1,29 @@
 # Tiger OpenAPI Rust SDK — Market Data / 行情查询
 
-> Rust SDK 行情 API 参考 / Quote API Reference (async)
+> Rust SDK 行情 API 参考 / Quote API Reference（async / tokio）
 <!-- 当用户提到"行情"、"报价"、"K线"、"价格"、"深度"、"quote"、"kline"、"price"时 -->
 
 ## 初始化 / Initialize
 
 ```rust
 use tigeropen::config::ClientConfig;
-use tigeropen::client::HttpClient;
+use tigeropen::model::quote_requests::*;
 use tigeropen::quote::QuoteClient;
 
 let config = ClientConfig::builder()
     .properties_file("tiger_openapi_config.properties")
     .build()?;
-let http_client = HttpClient::new(config)?;
-let qc = QuoteClient::new(&http_client);
+let qc = QuoteClient::from_config(config.clone());
 ```
+
+> **命名与入参约定 / Naming & requests**
+> - 行情方法统一以 `get_` 开头（`get_market_state`、`get_kline` …）
+> - 多数方法接收 `XxxRequest` 结构体；字段是 `Option<T>`，配合 `..Default::default()` 使用
+> - 返回**强类型结构体**，不是 `serde_json::Value`
+> - `HttpClient` 的正确 use 路径是 `tigeropen::client::http_client::HttpClient`
+>   （`tigeropen::client::HttpClient` 没有 re-export）
+> - Quote methods are prefixed `get_`; requests are structs with `Option<T>` fields —
+>   use `..Default::default()`. Returns are typed structs.
 
 ---
 
@@ -23,10 +31,13 @@ let qc = QuoteClient::new(&http_client);
 
 ```rust
 // market: "US" / "HK" / "CN" / "SG"
-let data = qc.market_state("US").await?;
-// 返回 Option<Value>，解析示例:
-// [{"market":"US","status":"Trading","openTime":"09:30","closeTime":"16:00",...}]
+let states = qc.get_market_state("US").await?;
+for s in &states {
+    println!("{} {} {} {}", s.market, s.market_status, s.status, s.open_time);
+}
 ```
+
+返回 `Vec<MarketState>`：`market`、`market_status`、`status`、`open_time`。
 
 ---
 
@@ -34,9 +45,27 @@ let data = qc.market_state("US").await?;
 <!-- 当用户提到"实时报价"、"最新价"、"real-time"时 -->
 
 ```rust
-let data = qc.quote_real_time(&["AAPL", "TSLA"]).await?;
-// 每个元素包含: latestPrice, askPrice, bidPrice, volume, change, changeRatio 等
+let briefs = qc
+    .get_real_time_quote(BriefRequest {
+        symbols: Some(vec!["AAPL".to_string(), "TSLA".to_string()]),
+        ..Default::default()
+    })
+    .await?;
+
+for b in &briefs {
+    println!(
+        "{} latest={:.2} bid={:.2} ask={:.2} vol={} preClose={:.2}",
+        b.symbol, b.latest_price, b.bid_price, b.ask_price, b.volume, b.pre_close
+    );
+}
 ```
+
+返回 `Vec<Brief>`。常用字段：`symbol`、`latest_price`、`latest_time`、
+`open`/`high`/`low`/`close`、`pre_close`、`ask_price`/`ask_size`、`bid_price`/`bid_size`、`volume`。
+
+`get_brief` 与 `get_real_time_quote` 入参、返回一致 / `get_brief` is an equivalent alias.
+
+`BriefRequest` 可选字段：`include_hour_trading: Option<bool>`、`sec_type`、`lang`。
 
 ---
 
@@ -44,19 +73,49 @@ let data = qc.quote_real_time(&["AAPL", "TSLA"]).await?;
 <!-- 当用户提到"K线"、"kline"、"bar"、"日线"时 -->
 
 ```rust
-// period: "day"/"week"/"month"/"year"/"1min"/"3min"/"5min"/"10min"/"15min"/"30min"/"60min"
-let data = qc.kline("AAPL", "day").await?;
-// 返回数组，每个元素: time, open, high, low, close, volume
+// period: "day"/"week"/"month"/"year"/"1min"/"5min"/"15min"/"30min"/"60min"
+let klines = qc
+    .get_kline(KlineRequest {
+        symbols: Some(vec!["AAPL".to_string()]),
+        period: Some("day".to_string()),
+        limit: Some(30),
+        ..Default::default()
+    })
+    .await?;
+
+for k in &klines {
+    for it in &k.items {
+        println!(
+            "{} {} O={:.2} H={:.2} L={:.2} C={:.2} V={}",
+            k.symbol, it.time, it.open, it.high, it.low, it.close, it.volume
+        );
+    }
+}
 ```
+
+返回 `Vec<Kline>`（`symbol`、`period`、`next_page_token`、`items`）；
+`KlineItem`：`time`、`open`、`high`、`low`、`close`、`volume`、`amount`。
+
+`KlineRequest` 支持时间范围（`begin_time`/`end_time`，毫秒）或分页（`begin_index`/`end_index`）。
+分页查询另有 `get_kline_by_page`。
 
 ---
 
 ## 分时 / Timeline
 
 ```rust
-let data = qc.timeline(&["AAPL", "TSLA"]).await?;
-// 返回分时数据: time, price, volume, avgPrice
+// 注意：接收 &[&str]，不是 Request 结构体
+let timelines = qc.get_timeline(&["AAPL", "TSLA"]).await?;
+for t in &timelines {
+    println!("{} {} preClose={:.2}", t.symbol, t.period, t.pre_close);
+    if let Some(bucket) = &t.intraday {
+        println!("  intraday points: {}", bucket.items.len());
+    }
+}
 ```
+
+返回 `Vec<Timeline>`。分时按时段分桶：`intraday`、`pre_hours`、`after_hours`，
+类型均为 `Option<TimelineBucket>`，取值前需判空。历史分时用 `get_timeline_history`。
 
 ---
 
@@ -64,136 +123,179 @@ let data = qc.timeline(&["AAPL", "TSLA"]).await?;
 <!-- 当用户提到"买卖盘"、"深度"、"depth"时 -->
 
 ```rust
-let data = qc.quote_depth("AAPL").await?;
-// 返回 asks/bids 数组，每层: price, volume
+let depths = qc
+    .get_quote_depth(QuoteDepthRequest {
+        symbols: Some(vec!["AAPL".to_string()]),
+        ..Default::default()
+    })
+    .await?;
+
+for d in &depths {
+    for a in &d.asks {
+        println!("ASK {:.2} x{} (orders={})", a.price, a.volume, a.count);
+    }
+    for b in &d.bids {
+        println!("BID {:.2} x{} (orders={})", b.price, b.volume, b.count);
+    }
+}
 ```
+
+返回 `Vec<Depth>`（`symbol`、`asks`、`bids`）；`DepthLevel`：`price`、`volume`、`count`。
 
 ---
 
 ## 逐笔成交 / Trade Ticks
 
 ```rust
-let data = qc.trade_tick(&["AAPL"]).await?;
-// 返回逐笔: time, price, volume, direction
+let ticks = qc
+    .get_trade_tick(TradeTickRequest {
+        symbols: Some(vec!["AAPL".to_string()]),
+        limit: Some(50),
+        ..Default::default()
+    })
+    .await?;
+
+for t in &ticks {
+    for it in &t.items {
+        println!("{} price={:.2} vol={}", it.time, it.price, it.volume);
+    }
+}
 ```
 
----
-
-## 期权到期日 / Option Expirations
-
-```rust
-let data = qc.option_expiration("AAPL").await?;
-// 返回到期日列表: dates, timestamps, period_tag ("m"=月度/"w"=周度)
-```
-
----
-
-## 期权链 / Option Chain
-
-```rust
-let data = qc.option_chain("AAPL", "2025-08-29").await?;
-// 返回 call/put 合约: identifier, strike, bid/ask, volume, openInterest, impliedVol, delta, gamma 等
-```
-
----
-
-## 期权报价 / Option Brief
-
-```rust
-let data = qc.option_brief(&["AAPL  250829C00150000"]).await?;
-// 期权代码格式: 标的(6位右空格填充) + YYMMDD + C/P + 行权价*1000(8位)
-// 返回: identifier, strike, put_call, latestPrice, bid/ask, impliedVol, delta, gamma, theta, vega 等
-```
-
----
-
-## 期权 K 线 / Option Kline
-
-```rust
-let data = qc.option_kline("AAPL  250829C00150000", "day").await?;
-```
+返回 `Vec<TradeTick>`（`symbol`、`begin_index`、`end_index`、`items`）。
 
 ---
 
 ## 期货 / Futures
 
 ```rust
-// 获取交易所列表
-let exchanges = qc.future_exchange().await?;
+let exchanges = qc.get_future_exchange().await?;
 
-// 获取期货合约列表
-let contracts = qc.future_contracts("CME").await?;
+// 按交易所代码查合约（位置参数，不是 Request）
+let fcontracts = qc.get_future_contracts("CME").await?;
 
-// 期货实时报价
-let data = qc.future_real_time_quote(&["CL2509"]).await?;
+let fquotes = qc
+    .get_future_real_time_quote(FutureRealTimeQuoteRequest {
+        contract_codes: Some(vec!["CLmain".to_string()]),
+        ..Default::default()
+    })
+    .await?;
 
-// 期货 K 线
-let data = qc.future_kline("CL2509", "day").await?;
+let fklines = qc
+    .get_future_kline(FutureKlineRequest {
+        contract_codes: Some(vec!["CLmain".to_string()]),
+        period: Some("day".to_string()),
+        ..Default::default()
+    })
+    .await?;
 ```
+
+另有 `get_future_depth`、`get_future_trade_ticks`、`get_future_trading_times`、
+`get_future_continuous_contracts`、`get_current_future_contract`、`get_all_future_contracts`。
 
 ---
 
-## 资金流向 / Capital Flow
+## 资金流 / Capital Flow
 
 ```rust
-let data = qc.capital_flow("AAPL").await?;
-let data = qc.capital_distribution("AAPL").await?;
+// 返回 Option<T>，需判空
+if let Some(flow) = qc.get_capital_flow("AAPL", "US", "day").await? {
+    println!("{:?}", flow);
+}
+if let Some(dist) = qc.get_capital_distribution("AAPL", "US").await? {
+    println!("{:?}", dist);
+}
 ```
+
+> `get_capital_flow` / `get_capital_distribution` 返回 `Result<Option<T>, TigerError>`。
 
 ---
 
-## 选股器 / Market Scanner
+## 公司行为 / Corporate Actions
 
 ```rust
-use serde_json::json;
+use tigeropen::model::quote::CorporateActionRequest;
 
-let data = qc.market_scanner(json!({
-    "market": "US",
-    "scanCode": "TOP_VOLUME",  // 成交量排行
-})).await?;
+// 注意：CorporateActionRequest 的字段是 String / Vec<String>，不是 Option
+// action_type 由方法内部设置，调用方无需填
+let changes = qc
+    .get_corporate_symbol_change(CorporateActionRequest {
+        market: "US".to_string(),
+        begin_date: "2026-01-01".to_string(),
+        end_date: "2026-08-01".to_string(),
+        ..Default::default()
+    })
+    .await?;
+
+let delistings = qc
+    .get_corporate_delisting(CorporateActionRequest {
+        market: "US".to_string(),
+        ..Default::default()
+    })
+    .await?;
+
+let ipos = qc
+    .get_corporate_ipo(CorporateActionRequest {
+        market: "US".to_string(),
+        ..Default::default()
+    })
+    .await?;
 ```
+
+拆股/派息/财报日历分别用 `get_corporate_split`、`get_corporate_dividend`、
+`get_corporate_earnings_calendar`。
+
+---
+
+## 其他行情能力 / Other Quote APIs
+
+```rust
+// 全量代码 / All symbols
+let symbols = qc
+    .get_symbols(SymbolsRequest {
+        market: Some("US".to_string()),
+        ..Default::default()
+    })
+    .await?;
+
+// 行情权限 / Quote permissions
+let perms = qc
+    .get_quote_permission(QuotePermissionRequest::default())
+    .await?;
+let grabbed = qc.grab_quote_permission().await?;
+```
+
+还封装了基金（`get_fund_symbols` / `get_fund_contracts` / `get_fund_quote`）、
+窝轮（`get_warrant_briefs` / `get_warrant_filter`）、行业（`get_industry_list` /
+`get_industry_stocks`）、财务（`get_financial_daily` / `get_financial_report`）、
+选股器（`market_scanner` / `get_market_scanner_tags`）、夜盘（`get_quote_overnight`）
+与交易日历（`get_trading_calendar`）。
 
 ---
 
 ## 直接调用 API / Raw API Call
 
-当以上方法不满足需求时：
-
 ```rust
-use serde_json::json;
+use tigeropen::client::http_client::HttpClient;
 
-let result = http_client.execute_raw("quote_real_time", json!({
-    "symbols": ["AAPL", "TSLA"],
-})).await?;
+let http_client = HttpClient::new(config.clone());
+let raw = http_client
+    .execute("quote_real_time", r#"{"symbols":["AAPL","TSLA"]}"#)
+    .await?;
+println!("{}", raw);
 ```
 
----
-
-## 解析返回值 / Parse Response
-
-所有方法返回 `Result<Option<serde_json::Value>, TigerError>`，需手动解析：
-
-```rust
-use serde_json::Value;
-
-if let Some(data) = qc.quote_real_time(&["AAPL"]).await? {
-    // 作为数组解析
-    if let Value::Array(items) = &data {
-        for item in items {
-            let symbol = item["symbol"].as_str().unwrap_or("");
-            let price = item["latestPrice"].as_f64().unwrap_or(0.0);
-            println!("{}: {:.2}", symbol, price);
-        }
-    }
-}
-```
+第二个参数是 **JSON 字符串**，返回 **String**；**没有** `execute_raw` 方法。
+Second arg is a **JSON string**, returns a **String**; there is no `execute_raw`.
 
 ---
 
 ## 注意事项 / Notes
 
-- 所有方法为 `async`，必须在 tokio 运行时中 `.await`
-- 返回 `Ok(None)` 表示请求成功但无数据（如市场关闭时）
-- 行情数据需要对应市场的行情权限
-- 期权行情需要单独开通期权行情权限
-- 港股期权代码格式：`TCH.HK 230616C00550000`（与美股不同）
+- 所有方法都是 `async`，需在 tokio 运行时中 `.await`
+- 请求结构体字段是 `Option<T>`，务必用 `..Default::default()` 补齐
+- `get_timeline` 接收 `&[&str]`；`get_future_contracts`、`get_capital_flow` 等接收位置参数
+- 资金流类接口返回 `Option<T>`，需判空
+- 分时数据分 `intraday`/`pre_hours`/`after_hours` 三桶，均为 `Option`
+- `HttpClient` 的正确 use 路径是 `tigeropen::client::http_client::HttpClient`
+- 行情数据需要对应市场的行情权限；期权行情需要单独开通期权行情权限

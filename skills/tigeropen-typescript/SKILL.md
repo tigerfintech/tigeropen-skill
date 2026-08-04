@@ -8,7 +8,7 @@ license: MIT
 compatibility: Requires Node.js 16+, supports ESM and CommonJS
 metadata:
   author: tigerbrokers
-  version: "0.1.0"
+  version: "0.5.4"
   language: zh_CN, en_US
 ---
 
@@ -20,7 +20,7 @@ metadata:
 > Trading involves real money. Default to **Paper Trading** when generating trading code. Always confirm order details before live orders.
 
 - Docs: https://docs.itigerup.com/docs/prepare
-- npm: `npm install tigeropen` | Node.js 16+, ESM/CommonJS
+- npm: `npm install @tigeropenapi/tigeropen` | Node.js 16+, ESM/CommonJS
 
 ## Language Rules / 语言规则
 
@@ -39,10 +39,12 @@ Reply in the user's language. Keep technical terms (code, API names, parameters)
 ## Quick Start
 
 ```typescript
-import { createClientConfig } from 'tigeropen';
-import { HttpClient } from 'tigeropen/client/http-client';
-import { QuoteClient } from 'tigeropen/quote/quote-client';
-import { TradeClient } from 'tigeropen/trade/trade-client';
+import {
+  createClientConfig,
+  HttpClient,
+  QuoteClient,
+  TradeClient,
+} from '@tigeropenapi/tigeropen';
 
 // 1. 创建配置 / Create config
 const config = createClientConfig({
@@ -51,15 +53,15 @@ const config = createClientConfig({
   account: 'your_account',
 });
 
-// 2. 查询行情 / Query quotes
+// 2. 查询行情 / Query quotes（注意：接收请求对象，不是数组）
 const httpClient = new HttpClient(config);
 const qc = new QuoteClient(httpClient);
-const quotes = await qc.getBrief(['AAPL', 'TSLA']);
+const quotes = await qc.getBrief({ symbols: ['AAPL', 'TSLA'] });
 console.log(quotes);
 
 // 3. 交易操作 / Trading
 const tc = new TradeClient(httpClient, config.account);
-const orders = await tc.getOrders();
+const orders = await tc.getOrders({ limit: 20 });
 console.log(orders);
 ```
 

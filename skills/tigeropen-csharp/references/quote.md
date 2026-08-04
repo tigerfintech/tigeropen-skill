@@ -18,9 +18,9 @@ TigerConfig config = new TigerConfig()
 QuoteClient quoteClient = new QuoteClient(config);
 ```
 
-所有行情 API 均通过 `TigerRequest<TResponse>` 模式调用：
+所有行情 API 均通过 `TigerRequest<TResponse>` 模式调用（下方为模式示意，非可编译代码）：
 
-```csharp
+```text
 var request = new TigerRequest<TResponse>()
 {
     ApiMethodName = QuoteApiService.XXX,  // API 名称常量
@@ -39,8 +39,8 @@ using TigerOpenAPI.Quote.Model;
 var request = new TigerRequest<MarketStateResponse>()
 {
     ApiMethodName = QuoteApiService.MARKET_STATE,
-    ModelValue = new MarketStateModel() { Market = "US" }
-    // market: "US" / "HK" / "CN" / "SG"
+    ModelValue = new QuoteMarketModel() { Market = Market.US }
+    // Market 枚举: Market.US / Market.HK / Market.CN / Market.SG
 };
 var response = await quoteClient.ExecuteAsync(request);
 ```
@@ -51,10 +51,10 @@ var response = await quoteClient.ExecuteAsync(request);
 <!-- 当用户提到"实时报价"、"最新价"、"real-time"时 -->
 
 ```csharp
-var request = new TigerRequest<QuoteRealTimeResponse>()
+var request = new TigerRequest<QuoteRealTimeQuoteResponse>()
 {
     ApiMethodName = QuoteApiService.QUOTE_REAL_TIME,
-    ModelValue = new QuoteRealTimeModel()
+    ModelValue = new QuoteSymbolModel()
     {
         Symbols = new List<string> { "AAPL", "TSLA", "00700" }
     }
@@ -66,7 +66,7 @@ if (response?.Data != null)
     foreach (var q in response.Data)
     {
         Console.WriteLine($"{q.Symbol}: latest={q.LatestPrice}, " +
-                          $"change={q.Change}, changeRatio={q.ChangeRatio}");
+                          $"preClose={q.PreClose}, volume={q.Volume}");
     }
 }
 ```
@@ -74,14 +74,13 @@ if (response?.Data != null)
 `BRIEF`（简版报价，含盘前盘后）：
 
 ```csharp
-var request = new TigerRequest<QuoteBriefResponse>()
+var request = new TigerRequest<QuoteRealTimeQuoteResponse>()
 {
     ApiMethodName = QuoteApiService.BRIEF,
-    ModelValue = new QuoteBriefModel()
+    ModelValue = new QuoteSymbolModel()
     {
         Symbols = new List<string> { "AAPL" },
-        IncludeHourTrading = true,  // 包含盘前盘后
-        IncludeAskBid = true        // 包含买卖盘
+        IncludeHourTrading = true   // 包含盘前盘后
     }
 };
 ```
@@ -92,16 +91,16 @@ var request = new TigerRequest<QuoteBriefResponse>()
 <!-- 当用户提到"K线"、"kline"、"bar"、"日线"时 -->
 
 ```csharp
-var request = new TigerRequest<KlineResponse>()
+var request = new TigerRequest<QuoteKlineResponse>()
 {
     ApiMethodName = QuoteApiService.KLINE,
-    ModelValue = new KlineModel()
+    ModelValue = new QuoteKlineModel()
     {
         Symbols = new List<string> { "AAPL" },
         Period = "day",    // day/week/month/year/1min/3min/5min/15min/30min/60min
         BeginTime = -1,    // -1 = 最新
         EndTime = -1,
-        Right = "br",      // br=前复权 / nr=不复权
+        Rigth = RightOption.br,  // 注意 SDK 源码拼写是 Rigth（非 Right）
         Limit = 251
     }
 };
@@ -109,10 +108,13 @@ var response = await quoteClient.ExecuteAsync(request);
 
 if (response?.Data != null)
 {
-    foreach (var bar in response.Data)
+    foreach (var k in response.Data)          // KlineItem（每个标的一组）
     {
-        Console.WriteLine($"time={bar.Time}, open={bar.Open}, " +
-                          $"high={bar.High}, low={bar.Low}, close={bar.Close}, vol={bar.Volume}");
+        foreach (var bar in k.Items)          // KlinePoint
+        {
+            Console.WriteLine($"{k.Symbol} time={bar.Time}, open={bar.Open}, " +
+                              $"high={bar.High}, low={bar.Low}, close={bar.Close}, vol={bar.Volume}");
+        }
     }
 }
 ```
@@ -123,10 +125,10 @@ if (response?.Data != null)
 
 ```csharp
 // 当日分时 / Current day timeline
-var request = new TigerRequest<TimelineResponse>()
+var request = new TigerRequest<QuoteTimelineResponse>()
 {
     ApiMethodName = QuoteApiService.TIMELINE,
-    ModelValue = new TimelineModel()
+    ModelValue = new QuoteTimelineModel()
     {
         Symbols = new List<string> { "AAPL" },
         IncludeHourTrading = false
@@ -134,10 +136,10 @@ var request = new TigerRequest<TimelineResponse>()
 };
 
 // 历史分时 / Historical timeline
-var histRequest = new TigerRequest<HistoryTimelineResponse>()
+var histRequest = new TigerRequest<QuoteHistoryTimelineResponse>()
 {
     ApiMethodName = QuoteApiService.HISTORY_TIMELINE,
-    ModelValue = new HistoryTimelineModel()
+    ModelValue = new QuoteHistoryTimelineModel()
     {
         Symbols = new List<string> { "AAPL" },
         Date = "2024-01-15"  // yyyy-MM-dd
@@ -157,7 +159,7 @@ var request = new TigerRequest<QuoteDepthResponse>()
     ModelValue = new QuoteDepthModel()
     {
         Symbols = new List<string> { "AAPL" },
-        Market = "US"   // "US" / "HK"
+        Market = Market.US   // "US" / "HK"
     }
 };
 var response = await quoteClient.ExecuteAsync(request);
@@ -169,10 +171,10 @@ var response = await quoteClient.ExecuteAsync(request);
 ## 逐笔成交 / Trade Ticks
 
 ```csharp
-var request = new TigerRequest<TradeTickResponse>()
+var request = new TigerRequest<QuoteTradeTickResponse>()
 {
     ApiMethodName = QuoteApiService.TRADE_TICK,
-    ModelValue = new TradeTickModel()
+    ModelValue = new QuoteTradeTickModel()
     {
         Symbols = new List<string> { "AAPL" },
         BeginIndex = -1,   // -1 = 最新
@@ -204,42 +206,59 @@ var response = await quoteClient.ExecuteAsync(request);
 ## 期权链 / Option Chain
 
 ```csharp
-var request = new TigerRequest<OptionChainResponse>()
+var chainRequest = new TigerRequest<OptionChainResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_CHAIN,
-    ModelValue = new OptionChainModel()
+    ModelValue = new OptionChainV3Model()
     {
-        Symbol = "AAPL",
-        Expiry = "2025-08-29",  // yyyy-MM-dd 或毫秒时间戳
-        // 可选筛选
-        // Market = "US"
+        Market = Market.US,
+        ReturnGreekValue = true,
+        OptionBasic = new List<OptionChainModel>()
+        {
+            new OptionChainModel()
+            {
+                Symbol = "AAPL",
+                // Expiry 是 long 毫秒时间戳
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)
+            }
+        }
     }
 };
-var response = await quoteClient.ExecuteAsync(request);
+var chainResponse = await quoteClient.ExecuteAsync(chainRequest);
 // 每个合约含: identifier, strike, right(CALL/PUT), bid, ask, volume,
 //            openInterest, impliedVol, delta, gamma 等
 ```
+
+筛选条件用 `OptionChainFilterModel` + `Range<Double>`，详见 [option.md](option.md)。
 
 ---
 
 ## 期权报价 / Option Brief
 
 ```csharp
-// identifier 格式: "SYMBOL  YYMMDD[C/P]STRIKE*1000(8位)"
-// 示例: "AAPL  250829C00150000"
-var request = new TigerRequest<OptionBriefResponse>()
+// 按合约要素查询；Expiry 是 long 毫秒时间戳
+var optBriefRequest = new TigerRequest<OptionBriefResponse>()
 {
     ApiMethodName = QuoteApiService.OPTION_BRIEF,
-    ModelValue = new OptionBriefModel()
+    ModelValue = new OptionBasicModel()
     {
-        Identifiers = new List<string>
+        Market = Market.US,
+        OptionBasic = new List<OptionCommonModel>()
         {
-            "AAPL  250829C00150000",
-            "AAPL  250829P00150000"
+            new OptionCommonModel()
+            {
+                Symbol = "AAPL",
+                Right = "CALL",
+                Strike = "150.0",
+                Expiry = DateUtil.ConvertTimestamp("2026-08-21", CustomTimeZone.NY_ZONE)
+            }
         }
     }
 };
+var optBriefResponse = await quoteClient.ExecuteAsync(optBriefRequest);
 ```
+
+期权完整能力（到期日/链/深度/K线/分析/行权）见 [option.md](option.md)。
 
 ---
 
@@ -250,9 +269,9 @@ var request = new TigerRequest<OptionBriefResponse>()
 var request = new TigerRequest<FutureRealTimeQuoteResponse>()
 {
     ApiMethodName = QuoteApiService.FUTURE_REAL_TIME_QUOTE,
-    ModelValue = new FutureRealTimeQuoteModel()
+    ModelValue = new FutureContractCodesModel()
     {
-        Symbols = new List<string> { "CL2509" }
+        ContractCodes = new List<string> { "CL2509" }
     }
 };
 
@@ -262,7 +281,7 @@ var klineRequest = new TigerRequest<FutureKlineResponse>()
     ApiMethodName = QuoteApiService.FUTURE_KLINE,
     ModelValue = new FutureKlineModel()
     {
-        Symbols = new List<string> { "CL2509" },
+        ContractCodes = new List<string> { "CL2509" },
         Period = "day",
         Limit = 100
     }
@@ -274,25 +293,25 @@ var klineRequest = new TigerRequest<FutureKlineResponse>()
 ## 资金流向 / Capital Flow
 
 ```csharp
-var request = new TigerRequest<CapitalFlowResponse>()
+var request = new TigerRequest<QuoteCapitalFlowResponse>()
 {
     ApiMethodName = QuoteApiService.CAPITAL_FLOW,
-    ModelValue = new CapitalFlowModel()
+    ModelValue = new QuoteCapitalFlowModel()
     {
         Symbol = "AAPL",
-        Market = "US",
+        Market = Market.US,
         Period = "day"  // day/week/month/intraday
     }
 };
 
 // 资金分布 / Capital distribution
-var distRequest = new TigerRequest<CapitalDistributionResponse>()
+var distRequest = new TigerRequest<QuoteCapitalDistributionResponse>()
 {
     ApiMethodName = QuoteApiService.CAPITAL_DISTRIBUTION,
-    ModelValue = new CapitalDistributionModel()
+    ModelValue = new QuoteCapitalModel()
     {
         Symbol = "AAPL",
-        Market = "US"
+        Market = Market.US
     }
 };
 ```

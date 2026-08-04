@@ -12,7 +12,10 @@ The TigerOpen CLI is a click-based command-line tool, available automatically af
 Query market data, manage orders, and view account info without writing Python code.
 
 - 入口命令 Entry point: `tigeropen`
-- 安装 Install: `pip install tigeropen`
+- 安装 Install:
+  - macOS / Linux: `curl -fsSL https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.sh | sh`
+  - Windows (PowerShell): `irm https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.ps1 | iex`
+  - pip: `pip install tigeropen`
 - Python: 3.8 - 3.14
 
 ---
@@ -92,6 +95,20 @@ tigeropen --format csv quote bars AAPL --limit 5
 ```bash
 tigeropen version
 ```
+
+## 卸载 / Uninstall
+
+```bash
+tigeropen uninstall                    # 交互确认后执行 pip uninstall
+tigeropen uninstall --remove-config    # 同时删除 ~/.tigeropen/ 配置目录
+tigeropen uninstall -y                 # 跳过确认(慎用)
+```
+
+> ⚠️ `--remove-config` 会 **不可恢复地删除** `~/.tigeropen/`（含 tiger_id、
+> 私钥、token 等凭证），且删除发生在 `pip uninstall` **之前**。
+> 与 `-y` 组合会跳过全部确认——除非确定要清空凭证，不要一起用。
+> `--remove-config` irreversibly deletes `~/.tigeropen/` (credentials included)
+> before uninstalling; combined with `-y` there is no confirmation prompt.
 
 ---
 
@@ -175,6 +192,47 @@ tigeropen quote symbols
 # 港股列表 / HK stock list
 tigeropen quote symbols --market HK
 ```
+
+### 选股器 / Stock Scanner
+
+```bash
+# 涨幅榜(预设 gainers = 盘中涨幅 > 5%) / Top gainers (preset)
+tigeropen quote scanner --filter gainers --sort acc.ChangeRate --sort-dir DESC
+
+# 跌幅榜(预设 losers = 盘中跌幅 > 5%) / Top losers
+tigeropen quote scanner --filter losers
+
+# 大市值 + 低 PE / Large-cap with low P/E
+tigeropen quote scanner --filter MarketValue:1e10: --filter PeTTM::20 --sort MarketValue
+
+# 高 ROE(年度) / High ROE (annual)
+tigeropen quote scanner --filter acc.ROE:0.15::ANNUAL --sort acc.ROE:ANNUAL --sort-dir DESC
+
+# 有期权可交易的标的 / Stocks with options available
+tigeropen quote scanner --filter tag.OptionsAvailable:1
+
+# 港股 + 限制条数 / HK market, cap results
+tigeropen quote scanner --market HK --filter gainers --limit 10 --page-size 20
+```
+
+`--filter` 可重复传入，格式如下（**前缀用点号 `.`**，不是冒号）：
+
+| 格式 Format | 字段类型 | 示例 |
+|------------|---------|------|
+| `FIELD` | `StockField`，仅取值不过滤 | `--filter MarketValue` |
+| `FIELD:min:max` | `StockField` 数值区间 | `--filter PeTTM:5:20` |
+| `FIELD:min:` / `FIELD::max` | 单边界 | `--filter MarketValue:1e10:` |
+| `acc.FIELD:min:max:PERIOD` | `AccumulateField`，周期 `ANNUAL`/`QUARTERLY`/`SEMIANNUAL` | `--filter acc.ROE:0.15::ANNUAL` |
+| `fin.FIELD:min:max` | `FinancialField`（固定 LTM） | `--filter fin.TotalRevenue:1e9:` |
+| `tag.FIELD:tag1,tag2` | `MultiTagField` 标签列表 | `--filter tag.Industry:Technology` |
+| `gainers` / `losers` | 预设：盘中涨/跌幅 ±5% | `--filter gainers` |
+
+其他选项：`--market US|HK`（默认 US）、`--sort`（同 `--filter` 字段格式）、
+`--sort-dir ASC|DESC`（默认 DESC）、`--limit`（默认 20）、`--page-size`（默认 20）。
+
+> 字段名大小写敏感，取自 `tigeropen.common.consts.filter_fields`，
+> 完整字段与 Python API 用法见 [quote.md](./quote.md) 选股器章节。
+> Field names are case-sensitive; see quote.md for the full Python API.
 
 ---
 
@@ -437,6 +495,7 @@ tigeropen push asset
 ```
 tigeropen [全局选项 Global Options]
 ├── version                             # SDK 版本 Version
+├── uninstall                           # 卸载 Uninstall (--remove-config 删除凭证)
 ├── config                              # 配置管理 Configuration
 │   ├── init                            # 交互式配置 Interactive setup
 │   ├── show                            # 查看配置（脱敏）Show config (masked)
@@ -450,6 +509,7 @@ tigeropen [全局选项 Global Options]
 │   ├── depth <SYMBOLS...>              # 盘口 Order book depth
 │   ├── market-status                   # 市场状态 Market status
 │   ├── symbols                         # 股票列表 Symbol list
+│   ├── scanner                         # 选股器 Stock scanner
 │   ├── option                          # 期权 Options
 │   │   ├── expirations <SYMBOL>        # 到期日 Expiration dates
 │   │   ├── chain <SYMBOL> <EXPIRY>     # 期权链 Option chain

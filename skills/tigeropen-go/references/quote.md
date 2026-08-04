@@ -7,9 +7,10 @@
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/client"
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/quote"
+    "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/model"
+    "github.com/tigerfintech/openapi-go-sdk/quote"
 )
 
 cfg, _ := config.NewClientConfig(
@@ -19,16 +20,23 @@ httpClient := client.NewHttpClient(cfg)
 qc := quote.NewQuoteClient(httpClient)
 ```
 
+> **命名约定 / Naming**: 行情方法统一以 `Get` 开头（`GetMarketState`、`GetKline` …）。
+> 入参多为 `model.XxxRequest` 结构体，返回**强类型结构体**，无需 `json.Unmarshal`。
+> Quote methods are prefixed with `Get`; most take a `model.XxxRequest` struct and return typed structs.
+
 ---
 
 ## 市场状态 / Market State
 
 ```go
 // market: "US" / "HK" / "CN" / "SG"
-result, err := qc.MarketState("US")
-// 返回 json.RawMessage，解析示例:
-// [{"market":"US","status":"Trading","openTime":"09:30","closeTime":"16:00",...}]
+states, err := qc.GetMarketState("US")
+for _, s := range states {
+    fmt.Println(s.Market, s.MarketStatus, s.Status, s.OpenTime)
+}
 ```
+
+返回 `[]model.MarketState`，字段：`Market`、`MarketStatus`、`Status`、`OpenTime`。
 
 ---
 
@@ -36,10 +44,21 @@ result, err := qc.MarketState("US")
 <!-- 当用户提到"实时报价"、"最新价"、"real-time"时 -->
 
 ```go
-result, err := qc.QuoteRealTime([]string{"AAPL", "TSLA"})
-// 返回 json.RawMessage
-// 每个元素包含: symbol, latestPrice, askPrice, bidPrice, volume, change, changeRatio 等
+briefs, err := qc.GetRealTimeQuote(model.BriefRequest{
+    Symbols: []string{"AAPL", "TSLA"},
+})
+for _, b := range briefs {
+    fmt.Printf("%s latest=%.2f bid=%.2f ask=%.2f vol=%d change=%.2f rate=%.4f\n",
+        b.Symbol, b.LatestPrice, b.BidPrice, b.AskPrice, b.Volume, b.Change, b.ChangeRate)
+}
 ```
+
+返回 `[]model.Brief`。常用字段：`Symbol`、`LatestPrice`、`LatestTime`、`Open`/`High`/`Low`/`Close`、
+`PreClose`、`AskPrice`/`AskSize`、`BidPrice`/`BidSize`、`Volume`、`Change`、`ChangeRate`、`Status`。
+
+`GetBrief` 与 `GetRealTimeQuote` 入参、返回一致，可互换 / `GetBrief` is an equivalent alias.
+
+`model.BriefRequest` 可选字段：`IncludeHourTrading *bool`（盘前盘后）、`SecType`、`Lang`。
 
 ---
 
@@ -48,18 +67,44 @@ result, err := qc.QuoteRealTime([]string{"AAPL", "TSLA"})
 
 ```go
 // period: "day"/"week"/"month"/"year"/"1min"/"3min"/"5min"/"10min"/"15min"/"30min"/"60min"
-result, err := qc.Kline("AAPL", "day")
-// 返回数组，每个元素: time, open, high, low, close, volume
+klines, err := qc.GetKline(model.KlineRequest{
+    Symbols: []string{"AAPL"},
+    Period:  "day",
+    Limit:   30,
+})
+for _, k := range klines {
+    for _, it := range k.Items {
+        fmt.Printf("%s %d O=%.2f H=%.2f L=%.2f C=%.2f V=%d\n",
+            k.Symbol, it.Time, it.Open, it.High, it.Low, it.Close, it.Volume)
+    }
+}
 ```
+
+返回 `[]model.Kline`，每个元素含 `Symbol`、`Period`、`NextPageToken`、`Items []model.KlineItem`。
+`KlineItem` 字段：`Time`、`Open`、`High`、`Low`、`Close`、`Volume`。
+
+`model.KlineRequest` 支持**时间范围**（`BeginTime`/`EndTime`，毫秒）或**分页**（`BeginIndex`/`EndIndex`、`PageToken`），
+两者二选一；另有 `Right`（复权）、`TradeSession`、`Date`、`WithFundamental`、`SecType`、`Lang`。
+
+`GetBars` 是 `GetKline` 的等价别名 / `GetBars` is an equivalent alias.
 
 ---
 
 ## 分时 / Timeline
 
 ```go
-result, err := qc.Timeline([]string{"AAPL", "TSLA"})
-// 返回分时数据: time, price, volume, avgPrice
+timelines, err := qc.GetTimeline([]string{"AAPL", "TSLA"})
+for _, t := range timelines {
+    fmt.Println(t.Symbol, t.Period, t.PreClose)
+    if t.Intraday != nil {
+        // t.Intraday / t.PreHours / t.AfterHours 为 *model.TimelineBucket
+        fmt.Printf("intraday points: %d\n", len(t.Intraday.Items))
+    }
+}
 ```
+
+返回 `[]model.Timeline`。注意分时按时段分桶：`Intraday`（盘中）、`PreHours`（盘前）、`AfterHours`（盘后），
+均为 `*model.TimelineBucket`，可能为 `nil`，取值前需判空。
 
 ---
 
@@ -67,26 +112,46 @@ result, err := qc.Timeline([]string{"AAPL", "TSLA"})
 <!-- 当用户提到"买卖盘"、"深度"、"depth"时 -->
 
 ```go
-result, err := qc.QuoteDepth("AAPL")
-// 返回 asks/bids 数组，每层: price, volume
+depths, err := qc.GetQuoteDepth(model.DepthQuoteRequest{
+    Symbols: []string{"AAPL"},
+})
+for _, d := range depths {
+    for _, a := range d.Asks {
+        fmt.Printf("ASK %.2f x%d (orders=%d)\n", a.Price, a.Volume, a.Count)
+    }
+    for _, b := range d.Bids {
+        fmt.Printf("BID %.2f x%d (orders=%d)\n", b.Price, b.Volume, b.Count)
+    }
+}
 ```
+
+返回 `[]model.Depth`（`Symbol`、`Asks`、`Bids`）；每档 `model.DepthLevel` 含 `Price`、`Volume`、`Count`。
 
 ---
 
 ## 逐笔成交 / Trade Ticks
 
 ```go
-result, err := qc.TradeTick([]string{"AAPL"})
-// 返回逐笔: time, price, volume, direction
+ticks, err := qc.GetTradeTick(model.TradeTickRequest{
+    Symbols: []string{"AAPL"},
+    Limit:   50,
+})
+for _, t := range ticks {
+    for _, it := range t.Items {
+        fmt.Printf("%d price=%.2f vol=%d\n", it.Time, it.Price, it.Volume)
+    }
+}
 ```
+
+返回 `[]model.TradeTick`（`Symbol`、`BeginIndex`、`EndIndex`、`Items`）。
 
 ---
 
 ## 期权到期日 / Option Expirations
 
 ```go
-result, err := qc.OptionExpiration("AAPL")
-// 返回到期日列表: dates, timestamps, period_tag ("m"=月度/"w"=周度)
+// 第一个参数是 symbol 切片；market 为可变参数，可省略
+exps, err := qc.GetOptionExpiration([]string{"AAPL"})
 ```
 
 ---
@@ -94,8 +159,19 @@ result, err := qc.OptionExpiration("AAPL")
 ## 期权链 / Option Chain
 
 ```go
-result, err := qc.OptionChain("AAPL", "2025-08-29")
-// 返回 call/put 合约: identifier, strike, bid/ask, volume, openInterest, impliedVol, delta, gamma 等
+// items 是 [][2]string，每项为 {symbol, expiry}
+chains, err := qc.GetOptionChain([][2]string{{"AAPL", "2026-08-21"}})
+```
+
+需要 Greeks 或按条件过滤时，用 `GetOptionChainByReq` / For Greeks or filters use `GetOptionChainByReq`:
+
+```go
+returnGreek := true
+chains, err := qc.GetOptionChainByReq(model.OptionChainRequest{
+    // 注意 OptionQueryItem.Expiry 是 int64 毫秒时间戳
+    OptionBasic:      []model.OptionQueryItem{{Symbol: "AAPL", Expiry: 1787356800000}},
+    ReturnGreekValue: &returnGreek,
+})
 ```
 
 ---
@@ -103,38 +179,68 @@ result, err := qc.OptionChain("AAPL", "2025-08-29")
 ## 期权报价 / Option Brief
 
 ```go
-result, err := qc.OptionBrief([]string{"AAPL  250829C00150000"})
-// 期权代码格式: 标的(6位右空格填充) + YYMMDD + C/P + 行权价*1000(8位)
-// 返回: identifier, strike, put_call, latestPrice, bid/ask, impliedVol, delta, gamma, theta, vega 等
+briefs, err := qc.GetOptionBrief([]string{"AAPL  260821C00150000"})
+// 也可用 GetOptionQuote(identifiers, timezone...)
+```
+
+期权代码格式：标的（6 位，右侧空格填充）+ YYMMDD + C/P + 行权价×1000（8 位）。
+返回 `[]model.Brief`，期权相关字段：`Strike`、`Right`、`Expiry`（**int64 毫秒时间戳**）、`Multiplier`、`OpenInterest`。
+
+---
+
+## 期货 / Futures
+
+```go
+exchanges, err := qc.GetFutureExchange()
+contracts, err := qc.GetFutureContracts("CME")
+futureQuotes, err := qc.GetFutureRealTimeQuote(model.FutureBriefRequest{
+    ContractCodes: []string{"CLmain"},
+})
+futureKlines, err := qc.GetFutureKline(model.FutureKlineRequest{
+    ContractCodes: []string{"CLmain"},
+    Period:        "day",
+})
 ```
 
 ---
 
-## 期货交易所 / Future Exchange
+## 资金流 / Capital Flow
 
 ```go
-result, err := qc.FutureExchange()
-// 返回交易所列表
+flow, err := qc.GetCapitalFlow("AAPL", "US", "day")
+dist, err := qc.GetCapitalDistribution("AAPL", "US")
+```
+
+---
+
+## 公司行为 / Corporate Actions
+
+```go
+changes, err := qc.GetCorporateSymbolChange(model.CorporateActionRequest{
+    Market: "US", BeginDate: "2026-01-01", EndDate: "2026-08-01",
+})
+delistings, err := qc.GetCorporateDelisting(model.CorporateActionRequest{Market: "US"})
+ipos, err := qc.GetCorporateIPO(model.CorporateActionRequest{Market: "US"})
 ```
 
 ---
 
 ## 直接调用 API / Raw API Call
 
-当以上方法不满足需求时，直接使用 method 名调用：
+当以上方法不满足需求时，用 `ExecuteRaw` 直接调用。
+第二个参数是 **JSON 字符串**，返回值是 **字符串** / Second arg is a **JSON string**; returns a **string**.
 
 ```go
-httpClient := client.NewHttpClient(cfg)
-result, err := httpClient.ExecuteRaw("quote_real_time", map[string]interface{}{
-    "symbols": []string{"AAPL", "TSLA"},
-})
+result, err := httpClient.ExecuteRaw("quote_real_time", `{"symbols":["AAPL","TSLA"]}`)
+fmt.Println(result)
 ```
 
 ---
 
 ## 注意事项 / Notes
 
-- 所有返回值为 `json.RawMessage`，需 `json.Unmarshal` 解析
-- 行情数据需要对应市场的行情权限
-- 期权行情需要单独开通期权行情权限
-- 港股期权代码格式：`TCH.HK 230616C00550000`（与美股不同）
+- 封装方法返回**强类型结构体**，直接取字段；只有 `ExecuteRaw` 返回 JSON 字符串
+- 行情数据需要对应市场的行情权限；期权行情需要单独开通期权行情权限
+- `model.Brief.Expiry` 是 `int64` 毫秒时间戳，不是字符串
+- 分时数据分 `Intraday`/`PreHours`/`AfterHours` 三个桶，均可能为 `nil`
+- 港股期权代码格式与美股不同，例：`TCH.HK 260616C00550000`

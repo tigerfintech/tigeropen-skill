@@ -13,7 +13,7 @@
 
 1. **查到期日 Get expirations**: `OptionExpirationQueryRequest` → 获取可选到期日列表 / Get available expiration dates
 2. **查期权链 Get chain**: `OptionChainQueryRequest` → 获取指定到期日的所有合约，可按 Greeks 筛选 / Get contracts for a given expiry, filter by Greeks
-3. **查行情 Get quotes**: `OptionQuoteRequest` → 获取期权实时行情 / Get real-time option quotes
+3. **查行情 Get quotes**: `OptionBriefQueryRequest` / `OptionBriefQueryV2Request` → 获取期权实时行情 / Get real-time option quotes
 
 ### 期权交易 / Option Trading
 

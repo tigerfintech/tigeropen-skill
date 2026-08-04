@@ -8,7 +8,7 @@ license: Apache-2.0
 compatibility: Requires Rust 1.70+, tokio async runtime
 metadata:
   author: tigerbrokers
-  version: "0.1.0"
+  version: "0.5.8"
   language: zh_CN, en_US
 ---
 
@@ -20,7 +20,7 @@ metadata:
 > Trading involves real money. Default to **Paper Trading** when generating trading code. Always confirm order details before live orders.
 
 - Docs: https://docs.itigerup.com/docs/prepare
-- GitHub: https://github.com/tigerfintech/openapi-sdks
+- GitHub: https://github.com/tigerfintech/openapi-rust-sdk
 - Crate: `tigeropen` | Rust 1.70+, tokio async
 
 ## Language Rules / 语言规则
@@ -41,6 +41,8 @@ Reply in the user's language. Keep technical terms (code, API names, parameters)
 
 ```rust
 use tigeropen::config::ClientConfig;
+use tigeropen::model::quote_requests::BriefRequest;
+use tigeropen::model::trade_requests::OrdersRequest;
 use tigeropen::quote::QuoteClient;
 use tigeropen::trade::TradeClient;
 
@@ -54,14 +56,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     // 2. 查询行情 / Query quotes
-    let qc = QuoteClient::new(config.clone());
-    let quotes = qc.get_quote_real_time(&["AAPL", "TSLA"]).await?;
-    println!("{:?}", quotes);
+    let qc = QuoteClient::from_config(config.clone());
+    let briefs = qc
+        .get_real_time_quote(BriefRequest {
+            symbols: Some(vec!["AAPL".to_string(), "TSLA".to_string()]),
+            ..Default::default()
+        })
+        .await?;
+    for b in &briefs {
+        println!("{} latest={}", b.symbol, b.latest_price);
+    }
 
     // 3. 交易操作 / Trading
-    let tc = TradeClient::new(config);
-    let orders = tc.get_orders().await?;
-    println!("{:?}", orders);
+    let tc = TradeClient::from_config(config.clone());
+    let orders = tc
+        .get_orders(OrdersRequest {
+            limit: Some(20),
+            ..Default::default()
+        })
+        .await?;
+    println!("orders: {}", orders.len());
 
     Ok(())
 }

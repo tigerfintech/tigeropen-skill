@@ -17,30 +17,40 @@ TigerConfig config = new TigerConfig()
 TradeClient tradeClient = new TradeClient(config);
 ```
 
+> **约定 / Conventions**
+> - 每次调用都是 `new TigerRequest<TResponse>() { ApiMethodName = ..., ModelValue = ... }`
+>   再 `ExecuteAsync` / `Execute`
+> - `TradeClient.Validate()` 会自动填入 `Account`（除 `ACCOUNTS` 接口）与
+>   机构用户的 `SecretKey`，已显式赋值的不会被覆盖
+> - 枚举参数用枚举值（`SegmentType.SEC`、`Currency.USD`），**不能传字符串**
+> - Every call builds a `TigerRequest<TResponse>`; enum params need enum values, not strings.
+
 ---
 
 ## 账户列表 / Account List
 
 ```csharp
+using TigerOpenAPI.Model;
 using TigerOpenAPI.Trade;
-using TigerOpenAPI.Trade.Model;
 using TigerOpenAPI.Trade.Response;
 
-var request = new TigerRequest<AccountsResponse>()
+// ACCOUNTS 用基类 ApiModel —— 没有 AccountModel 类型
+var accountsRequest = new TigerRequest<AccountsResponse>()
 {
     ApiMethodName = TradeApiService.ACCOUNTS,
-    ModelValue = new AccountModel()
-    // 不传 Account 字段返回所有账号（综合、环球、模拟）
-    // Omit Account field to return all accounts
+    ModelValue = new ApiModel()
 };
-var response = await tradeClient.ExecuteAsync(request);
-
-// 返回字段 / Response fields:
-// account     - 账户号（综合5~10位数字，模拟17位，环球以U开头）
-// capability  - CASH（现金）/ RegTMargin（保证金）/ PMGRN（组合保证金）
-// status      - Funded / Open / Pending / Rejected / Closed
-// accountType - STANDARD / GLOBAL / PAPER
+AccountsResponse accountsResponse = await tradeClient.ExecuteAsync(accountsRequest);
 ```
+
+`AccountsResponse.Data` 是 `Dictionary<string, List<AccountItem>>`。字段说明 / Fields:
+- 账户号（综合 5~10 位数字，模拟 17 位，环球以 U 开头）
+- `capability` — `CASH`（现金）/ `RegTMargin`（保证金）/ `PMGRN`（组合保证金）
+- `status` — `Funded` / `Open` / `Pending` / `Rejected` / `Closed`
+- 账户类型 — `STANDARD` / `GLOBAL` / `PAPER`
+
+> `ACCOUNTS` 是唯一不自动注入 `Account` 的交易接口。
+> `ACCOUNTS` is the only trade API that does not get `Account` auto-injected.
 
 ---
 
@@ -49,111 +59,103 @@ var response = await tradeClient.ExecuteAsync(request);
 ### 环球账户 / Global Account
 
 ```csharp
+using TigerOpenAPI.Common;
 using TigerOpenAPI.Trade.Model;
-using TigerOpenAPI.Trade.Response;
 
-var request = new TigerRequest<AssetsResponse>()
+// 注意：返回类型是通用 TigerDictResponse，模型是 GlobalAssetsModel
+var globalAssetsRequest = new TigerRequest<TigerDictResponse>()
 {
     ApiMethodName = TradeApiService.ASSETS,
-    ModelValue = new AssetModel()
+    ModelValue = new GlobalAssetsModel()
     {
-        Account = "DU000001",
-        Segment = true,       // 按证券/期货分类
-        MarketValue = true    // 按市场分市值（仅环球账户）
+        Segment = true,      // 按证券/期货分类
+        MarketValue = true   // 按市场分市值（仅环球账户）
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
-
-// 主要返回字段 / Key response fields:
-// netLiquidation  - 净清算值
-// availableFunds  - 可用资金
-// buyingPower     - 购买力
-// cashValue       - 现金
-// initMarginReq   - 初始保证金要求
-// maintMarginReq  - 维持保证金要求
-// unrealizedPnl   - 浮动盈亏
-// realizedPnl     - 已实现盈亏
-// segments        - 按交易品种（S=证券, C=期货）分类资产
-// marketValues    - 按市场（USD/HKD）分类资产
+TigerDictResponse globalAssets = await tradeClient.ExecuteAsync(globalAssetsRequest);
+// globalAssets.Data 是 Dictionary<string, object>
 ```
+
+> `ASSETS` 接口**没有** `AssetsResponse` / `AssetModel` 类型；
+> 用 `TigerDictResponse` + `GlobalAssetsModel`。
+> There is no `AssetsResponse`/`AssetModel`; use `TigerDictResponse` + `GlobalAssetsModel`.
 
 ### 综合/模拟账号 / Standard/Paper Account
 
 ```csharp
-using TigerOpenAPI.Trade.Model;
-using TigerOpenAPI.Trade.Response;
+using TigerOpenAPI.Common.Enum;
 
-var request = new TigerRequest<PrimeAssetResponse>()
+var primeRequest = new TigerRequest<PrimeAssetResponse>()
 {
     ApiMethodName = TradeApiService.PRIME_ASSETS,
-    ModelValue = new PrimeAssetModel()
+    ModelValue = new PrimeAssetsModel()
     {
-        Account = "123456",
-        BaseCurrency = "USD",
-        Consolidated = true   // SEC+FUND聚合显示
+        BaseCurrency = Currency.USD.ToString(),
+        Consolidated = true   // SEC+FUND 聚合显示
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
-
-// segments 数组主要字段 / Segment key fields:
-// category              - S（证券）/ C（期货）/ F（基金）/ D（数字货币）
-// capability            - RegTMargin / Cash
-// buyingPower           - 最大购买力（保证金账户日内4倍，隔夜2倍）
-// cashAvailableForTrade - 可用资金（用于判断能否开仓）
-// cashBalance           - 现金余额
-// netLiquidation        - 净清算值
-// initMargin            - 初始保证金
-// maintainMargin        - 维持保证金（低于此值会强平）
-// unrealizedPL          - 浮动盈亏
-// currencyAssets        - 按币种（USD/HKD/SGD/CNH）细分资产
+PrimeAssetResponse primeAssets = await tradeClient.ExecuteAsync(primeRequest);
+PrimeAssetItem primeItem = primeAssets.Data;
 ```
+
+> 模型是 `PrimeAssetsModel`（复数 Assets），响应是 `PrimeAssetResponse`（单数 Asset）。
+> `BaseCurrency` 是 `string`，需 `.ToString()`；`Consolidated` 是 `Boolean`。
+
+`segments` 主要字段：
+- `category` — S（证券）/ C（期货）/ F（基金）/ D（数字货币）
+- `capability` — RegTMargin / Cash
+- 购买力、可用资金、现金余额、净清算值
+- 初始保证金、维持保证金（低于此值会强平）
+- 浮动盈亏、按币种（USD/HKD/SGD/CNH）细分
 
 ---
 
 ## 账户持仓 / Account Positions
 
 ```csharp
-using TigerOpenAPI.Trade.Model;
-using TigerOpenAPI.Trade.Response;
-
-var request = new TigerRequest<PositionsResponse>()
+var positionsRequest = new TigerRequest<PositionsResponse>()
 {
     ApiMethodName = TradeApiService.POSITIONS,
-    ModelValue = new PositionModel()
+    ModelValue = new PositionsModel()
     {
-        Account = "123456",
-        SecType = "STK",    // STK/OPT/FUT，默认STK
-        Currency = "ALL",   // ALL/USD/HKD/CNH
-        Market = "ALL"      // ALL/US/HK/CN
+        SecType = SecType.STK,     // 枚举，不是字符串
+        Market = Market.US,
+        Currency = Currency.USD
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
+PositionsResponse positionsResponse = await tradeClient.ExecuteAsync(positionsRequest);
 
-// 主要持仓字段 / Key position fields:
-// symbol        - 股票代码
-// positionQty   - 持仓数量
-// averageCost   - 平均成本（FIFO）
-// marketValue   - 市值
-// unrealizedPnl - 浮动盈亏
-// secType       - 证券类型
-// market        - 市场
-// currency      - 币种
+// Data 是 PositionsItem，持仓列表在 Data.Items 中
+PositionsItem positionsItem = positionsResponse.Data;
+foreach (var p in positionsItem.Items)
+{
+    Console.WriteLine($"{p.Symbol} {p.PositionQty} {p.AverageCost} {p.MarketValue}");
+}
 ```
+
+> 模型是 `PositionsModel`（复数），**不是** `PositionModel`。
+> `PositionsResponse.Data` 是 `PositionsItem`，真正的列表在 `Data.Items`，
+> 不能直接遍历 `Data`。
+> `PositionDetail` 用 `PositionQty`（**没有** `Quantity`）与 `LatestPrice`
+> （**没有** `MarketPrice`）。
+
+`PositionDetail` 常用字段：`Symbol`、`PositionQty`、`SalableQty`、`AverageCost`、
+`MarketValue`、`LatestPrice`、`UnrealizedPnl`、`UnrealizedPnlPercent`、
+`RealizedPnl`、`TodayPnl`。
 
 ### 期权持仓 / Option Positions
 
 ```csharp
-var request = new TigerRequest<PositionsResponse>()
+var optPositionsRequest = new TigerRequest<PositionsResponse>()
 {
     ApiMethodName = TradeApiService.POSITIONS,
-    ModelValue = new PositionModel()
+    ModelValue = new PositionsModel()
     {
-        Account = "123456",
-        SecType = "OPT"
+        SecType = SecType.OPT,
+        Right = "CALL",       // Right 是 string
+        Strike = 150.0        // Strike 是 Double
     }
 };
-// 期权持仓额外字段 / Option-specific fields:
-// strike - 行权价, expiry - 到期日, right - CALL/PUT
 ```
 
 ---
@@ -161,152 +163,171 @@ var request = new TigerRequest<PositionsResponse>()
 ## 历史资产分析 / Asset Analytics (PnL History)
 
 ```csharp
-using TigerOpenAPI.Trade.Model;
-using TigerOpenAPI.Trade.Response;
-
-var request = new TigerRequest<PrimeAnalyticsAssetResponse>()
+var analyticsRequest = new TigerRequest<PrimeAnalyticsAssetResponse>()
 {
-    ApiMethodName = TradeApiService.PRIME_ANALYTICS_ASSET,
+    ApiMethodName = TradeApiService.ANALYTICS_ASSET,
     ModelValue = new PrimeAnalyticsAssetModel()
     {
-        Account = "123456",
-        StartDate = "2024-01-01",
-        EndDate = "2024-01-31",
-        SegType = "SEC",   // SEC / FUT
-        Currency = "USD"
+        StartDate = "2026-01-01",   // yyyy-MM-dd
+        EndDate = "2026-01-31",
+        SegType = SegmentType.SEC,
+        Currency = Currency.USD
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
-
-// summary 字段 / Summary fields:
-// pnl                - 盈亏金额
-// pnlPercentage      - 收益率
-// annualizedReturn   - 年化收益率
-
-// history 数组每项字段 / History item fields:
-// date               - 日期时间戳（毫秒）
-// asset              - 总资产
-// pnl                - 当日盈亏
-// cashBalance        - 现金余额
-// grossPositionValue - 持仓市值
-// deposit            - 入金
-// withdrawal         - 出金
+PrimeAnalyticsAssetResponse analytics = await tradeClient.ExecuteAsync(analyticsRequest);
 ```
+
+> 常量是 `TradeApiService.ANALYTICS_ASSET`，**不是** `PRIME_ANALYTICS_ASSET`。
+> `SegType` 是 `SegmentType` 枚举，`Currency` 是 `Currency` 枚举。
+
+返回内容包含汇总（盈亏金额、收益率、年化收益率）与按日历史
+（日期毫秒时间戳、总资产、当日盈亏、现金余额、持仓市值、入金、出金）。
 
 ---
 
 ## 最大可交易数量 / Estimate Tradable Quantity
 
 ```csharp
-var request = new TigerRequest<EstimateTradableQuantityResponse>()
+var qtyRequest = new TigerRequest<EstimateTradableQuantityResponse>()
 {
     ApiMethodName = TradeApiService.ESTIMATE_TRADABLE_QUANTITY,
     ModelValue = new EstimateTradableQuantityModel()
     {
-        Account = "123456",
         Symbol = "AAPL",
-        SecType = "STK",
-        Action = "BUY",
-        OrderType = "LMT",
+        SecType = SecType.STK,        // 枚举
+        Action = ActionType.BUY,      // 枚举
+        OrderType = OrderType.LMT,    // 枚举
         LimitPrice = 150.0
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
-
-// 返回字段 / Response fields:
-// tradableQuantity          - 现金可买/卖数量
-// financingQuantity         - 融资融券可买/卖数量
-// positionQuantity          - 持仓数量
-// tradablePositionQuantity  - 持仓可交易数量
+EstimateTradableQuantityResponse qty = await tradeClient.ExecuteAsync(qtyRequest);
+TradableQuantityItem qtyItem = qty.Data;
 ```
+
+返回现金可买/卖数量、融资融券可买/卖数量、持仓数量与持仓可交易数量。
 
 ---
 
 ## 资金转账（Segment 间）/ Segment Fund Transfer
 
+三个接口共用同一个 `SegmentFundModel` / All three share one `SegmentFundModel`:
+
 ### 查询可转出金额 / Query Available Amount
 
 ```csharp
-var request = new TigerRequest<SegmentFundAvailableResponse>()
+var availRequest = new TigerRequest<SegmentFundAvailableResponse>()
 {
     ApiMethodName = TradeApiService.SEGMENT_FUND_AVAILABLE,
-    ModelValue = new SegmentFundAvailableModel()
+    ModelValue = new SegmentFundModel()
     {
-        Account = "123456",
-        FromSegment = "SEC",  // SEC / FUT
-        Currency = "USD"
+        FromSegment = SegmentType.SEC,   // 枚举
+        Currency = Currency.USD          // 枚举
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
-// fromSegment, currency, amount
+SegmentFundAvailableResponse avail = await tradeClient.ExecuteAsync(availRequest);
 ```
 
 ### 发起转账 / Transfer
 
 ```csharp
-var request = new TigerRequest<SegmentFundResponse>()
+var transferRequest = new TigerRequest<SegmentFundResponse>()
 {
-    ApiMethodName = TradeApiService.SEGMENT_FUND_TRANSFER,
-    ModelValue = new SegmentFundTransferModel()
+    ApiMethodName = TradeApiService.TRANSFER_SEGMENT_FUND,
+    ModelValue = new SegmentFundModel()
     {
-        Account = "123456",
-        FromSegment = "SEC",
-        ToSegment = "FUT",
-        Currency = "USD",
-        Amount = 1000.0
+        FromSegment = SegmentType.SEC,
+        ToSegment = SegmentType.FUT,
+        Currency = Currency.HKD,
+        Amount = 1000D
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
+SegmentFundResponse transferred = await tradeClient.ExecuteAsync(transferRequest);
 // 转账状态 status: NEW / PROC / SUCC / FAIL / CANC
 ```
 
-### 取消转账 / Cancel Transfer
+> 常量是 `TRANSFER_SEGMENT_FUND`（动词在前），**不是** `SEGMENT_FUND_TRANSFER`。
+> 模型统一是 `SegmentFundModel`，没有 `SegmentFundTransferModel` / `SegmentFundAvailableModel`。
+
+### 撤销转账与历史 / Cancel & History
 
 ```csharp
-var request = new TigerRequest<SegmentFundResponse>()
+var cancelFundRequest = new TigerRequest<SegmentFundResponse>()
 {
-    ApiMethodName = TradeApiService.SEGMENT_FUND_CANCEL,
-    ModelValue = new SegmentFundCancelModel()
-    {
-        Account = "123456",
-        Id = 30300805635506176L
-    }
+    ApiMethodName = TradeApiService.CANCEL_SEGMENT_FUND,
+    ModelValue = new SegmentFundModel() { Id = 30359957871001600L }
 };
-var response = await tradeClient.ExecuteAsync(request);
+
+var historyRequest = new TigerRequest<SegmentFundsResponse>()
+{
+    ApiMethodName = TradeApiService.SEGMENT_FUND_HISTORY,
+    ModelValue = new SegmentFundModel() { Limit = 10 }
+};
 ```
+
+> 常量是 `CANCEL_SEGMENT_FUND`，**不是** `SEGMENT_FUND_CANCEL`。
+> `SegmentFundModel.Id` 与 `Limit` 是**公开字段**（不是属性），类型分别为 `Int64` / `Int32`。
 
 ---
 
-## 出入金记录 / Deposit & Withdrawal Records
+## 出入金记录 / Funding Records
+
+SDK **没有** `DEPOSIT_WITHDRAW` 常量。出入金用 `TRANSFER_FUND`，资金明细用 `FUND_DETAILS`。
+There is no `DEPOSIT_WITHDRAW`; use `TRANSFER_FUND` and `FUND_DETAILS`.
 
 ```csharp
-var request = new TigerRequest<DepositWithdrawResponse>()
+var depositRequest = new TigerRequest<DepositWithdrawResponse>()
 {
-    ApiMethodName = TradeApiService.DEPOSIT_WITHDRAW,
+    ApiMethodName = TradeApiService.TRANSFER_FUND,
     ModelValue = new DepositWithdrawModel()
     {
-        Account = "123456",
-        Lang = "en_US"
+        SegType = SegmentType.SEC,
+        Limit = 20,
+        Page = 1
     }
 };
-var response = await tradeClient.ExecuteAsync(request);
 
-// 每条记录字段 / Record fields:
-// type         - 1(入金) / 3(出金) / 20(出金费用) 等
-// typeDesc     - 类型描述
-// currency     - 币种
-// amount       - 金额
-// businessDate - 业务日期
-// completedStatus - 是否完成
+var fundDetailsRequest = new TigerRequest<FundDetailsResponse>()
+{
+    ApiMethodName = TradeApiService.FUND_DETAILS,
+    ModelValue = new FundDetailsModel()
+    {
+        SegTypes = new List<string> { "SEC" },
+        Currency = "USD",
+        Limit = 20L
+    }
+};
 ```
+
+> `DepositWithdrawModel.SegType` 是 `SegmentType?`；`FundDetailsModel.SegTypes`
+> 是 `List<string>`、`Currency` 是 `string`、`Limit` 是 `long?`。
+> 这两个接口在 SDK 示例中未被调用过，字段以源码为准。
+
+---
+
+## 聚合资产 / Aggregate Assets
+
+```csharp
+var aggregateRequest = new TigerRequest<AggregateAssetResponse>()
+{
+    ApiMethodName = TradeApiService.AGGREGATE_ASSETS,
+    ModelValue = new AggregateAssetModel() { SegType = "SEC" }
+};
+AggregateAssetResponse aggregate = await tradeClient.ExecuteAsync(aggregateRequest);
+```
+
+> `AggregateAssetModel.SegType` / `BaseCurrency` 都是 `string`。
 
 ---
 
 ## 注意事项 / Notes
 
-- 环球账户(Global)用 `ASSETS`，综合/模拟账户(Standard/Paper)用 `PRIME_ASSETS`
+- 环球账户(Global)用 `ASSETS` + `TigerDictResponse`；综合/模拟账户用
+  `PRIME_ASSETS` + `PrimeAssetResponse`
 - Segment 分类：S=证券, C=期货, F=基金, D=数字货币
-- 持仓使用 `positionQty` 字段，旧字段 `position`+`positionScale` 已废弃
-- `maintainMargin` 降至 0 以下时会触发强制平仓
-- 机构用户额外传 `SecretKey` 字段
-- 支持 `Execute()` 同步和 `ExecuteAsync()` 异步两种调用方式
+- **枚举参数必须传枚举值**（`SecType.STK`、`SegmentType.SEC`、`Currency.USD`、
+  `ActionType.BUY`、`OrderType.LMT`、`Language.en_US`），不能传字符串
+- `PositionsResponse.Data` 是 `PositionsItem`，列表在 `Data.Items`
+- `PositionDetail` 用 `PositionQty` 与 `LatestPrice`
+- 动词在前的常量：`TRANSFER_SEGMENT_FUND`、`CANCEL_SEGMENT_FUND`、`ANALYTICS_ASSET`
+- `Execute`/`ExecuteAsync` 不抛异常，检查 `IsSuccess()` / `Code`
+- 机构用户设置 `TigerConfig.SecretKey`，SDK 会自动注入到 `TradeModel` 子类请求

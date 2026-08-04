@@ -18,12 +18,12 @@
 
 ### 实盘下单工作流 / Live Order Workflow
 
-当用户要求实盘交易时，**必须执行以下流程** / When user requests live trading, follow these steps:
+当用户要求实盘交易时，**每步均为必须，缺少任何步骤不得下单** / Every step is mandatory — skip any and do NOT place the order:
 
 1. **确认账户 Verify account**: 获取账户列表，筛选 `accountType != "PAPER"` 的实盘账户 / Get account list, filter for non-PAPER accounts
-2. **二次确认 Confirm with user**: 下单前必须与用户确认：标的代码、买卖方向、数量、价格、账户类型 / Confirm symbol, action, quantity, price, account type
-3. **预览订单 Preview**: 建议先调用预览接口查看预估佣金和保证金 / Preview for commission and margin estimates
-4. **执行下单 Execute**: 确认后执行下单 / Place the order after confirmation
+2. **预览订单 Preview**: 调用 `TradeOrderPreviewRequest` 查看预估佣金和保证金，将结果展示给用户 / Call preview, show estimated commission and margin to user
+3. **等待用户明确确认 Wait for explicit confirmation**: 将订单详情（标的、方向、数量、价格、账户、预估佣金）以表格展示，**停止并等待用户明确回复**；未收到确认前**禁止执行下单** / Display order details in a table, **stop and wait**; do NOT submit until user explicitly confirms
+4. **执行下单 Execute**: 用户确认后执行下单 / Place the order only after confirmation
 5. **检查状态 Check status**: 下单返回成功仅表示提交，需查询订单确认成交 / Submission success ≠ execution; query order to confirm fill
 
 ---
@@ -385,12 +385,13 @@ response = client.execute(request);
 TradeOrderRequest request = TradeOrderRequest.buildLimitOrder("402901", contract, ActionType.BUY, 100, 100.0d);
 // 盘前竞价: AM or AL + OPG; 盘后竞价: AM or AL + DAY
 request.setAuctionOrder(OrderType.AL, TimeInForce.OPG);
-response = client.execute(request);
+TradeOrderResponse response = client.execute(request);
 
 // 竞价市价单 / Auction market order
-request = TradeOrderRequest.buildMarketOrder("402901", contract, ActionType.BUY, 100);
-request.setAuctionOrder(OrderType.AM, TimeInForce.OPG);
-response = client.execute(request);
+TradeOrderRequest marketAuctionRequest =
+    TradeOrderRequest.buildMarketOrder("402901", contract, ActionType.BUY, 100);
+marketAuctionRequest.setAuctionOrder(OrderType.AM, TimeInForce.OPG);
+TradeOrderResponse marketAuctionResponse = client.execute(marketAuctionRequest);
 ```
 
 ### 止损单 STP / Stop Order
@@ -499,8 +500,14 @@ TradeOrderResponse response = client.execute(request);
 
 ```java
 ContractItem contract = ContractItem.buildStockContract("BILI", "USD");
+// 带 account 的重载签名（12 参数）：
+// (account, contract, action, Long quantity, Integer quantityScale,
+//  profitTakerPrice, profitTakerTif, profitTakerRth,
+//  stopLossPrice, stopLossLimitPrice, stopLossTif, stopLossRth)
+// quantityScale 是 2024-03 碎股支持时新增的必填位（不需要时传 null）
+// quantityScale was added for fractional shares; pass null when unused
 TradeOrderRequest request = TradeOrderRequest.buildOCABracketsOrder(
-        "13810712", contract, ActionType.SELL, 1,
+        "13810712", contract, ActionType.SELL, 1L, null,
         17.0D, TimeInForce.DAY, Boolean.TRUE,    // 止盈: price, tif, outsideRth
         12.0D, null, TimeInForce.DAY, Boolean.FALSE); // 止损: price, limitPrice, tif, outsideRth
 request.setLang(Language.en_US).setUserMark("test-oca");
@@ -550,6 +557,112 @@ TradeOrderResponse vwapResponse = client.execute(vwapRequest);
 | algo_params.start_time | long | 策略开始时间(时间戳) | 选填 | 选填 |
 | algo_params.end_time | long | 策略结束时间(时间戳) | 选填 | 选填 |
 | algo_params.participation_rate | string | 最大参与率(0.01-0.5) | - | 选填 |
+
+### 冰山单 ICEBERG / Iceberg Order
+
+大单拆分为小单分批展示，减少市场冲击。SDK 2.5.1 起支持。
+Splits a large order into smaller visible slices. Added in SDK 2.5.1.
+
+```java
+ContractItem icebergContract = ContractItem.buildStockContract("AAPL", "USD");
+
+// 基础形式：(account, contract, action, quantity, limitPrice, displaySize)
+// 默认 minDisplaySize = displaySize、priceType = PriceType.LIMIT_PRICE
+TradeOrderRequest icebergBasic = TradeOrderRequest.buildIcebergOrder(
+        account, icebergContract, ActionType.BUY, 1000, 180.0D, 100);
+TradeOrderResponse icebergBasicResp = client.execute(icebergBasic);
+
+// 完整形式：额外指定 minDisplaySize / checkIntervals / priceType / startTime / endTime
+TradeOrderRequest icebergFull = TradeOrderRequest.buildIcebergOrder(
+        account, icebergContract, ActionType.BUY, 1000, 180.0D,
+        100,                       // displaySize 每次展示数量
+        50,                        // minDisplaySize 最小展示数量
+        30,                        // checkIntervals 检查间隔（秒）
+        PriceType.LIMIT_PRICE,     // 价格类型
+        null,                      // startTime（epoch ms，可为 null）
+        null);                     // endTime（epoch ms，可为 null）
+TradeOrderResponse icebergFullResp = client.execute(icebergFull);
+```
+
+`PriceType` 枚举（`struct.enums.PriceType`）共 4 个值 / 4 values:
+`LIMIT_PRICE`（限价）、`ASK_PRICE`（卖一价）、`BID_PRICE`（买一价）、`LATEST_PRICE`（最新价）。
+
+> ⚠️ **不存在 `IcebergPriceType` 枚举**，也没有 `OPPONENT_PRICE` 值；
+> 构建方法在 `TradeOrderRequest` 上，不在 `TradeOrderModel` 上。
+> （SDK CHANGELOG 在这三点上均有误，以源码为准。）
+> There is no `IcebergPriceType` enum and no `OPPONENT_PRICE` value; the builder
+> lives on `TradeOrderRequest`. The SDK CHANGELOG is wrong on all three points.
+
+冰山单改单：重新用 `buildIcebergOrder` 构造，再改 methodName 与 id / To modify:
+
+```java
+ContractItem icebergModifyContract = ContractItem.buildStockContract("AAPL", "USD");
+TradeOrderRequest icebergModify = TradeOrderRequest.buildIcebergOrder(
+        account, icebergModifyContract, ActionType.BUY, 1000, 181.0D, 100);
+icebergModify.setApiMethodName(MethodName.MODIFY_ORDER);
+((TradeOrderModel) icebergModify.getApiModel()).setId(12345678901234567L);
+TradeOrderResponse icebergModifyResp = client.execute(icebergModify);
+```
+
+---
+
+### 期权提前行权 / Option Early Exercise
+
+SDK 2.5.0 起支持。所有请求类的构造函数是 private，必须用静态工厂方法。
+Added in SDK 2.5.0. All request classes have private ctors — use the factories.
+
+```java
+long optContractId = 123456789L;
+
+// 1. 行权检验（预估行权后持仓变化）/ Check
+OptionExerciseCheckRequest checkReq = OptionExerciseCheckRequest.buildRequest(
+        account, optContractId, OptionExerciseType.Exercise);
+OptionExerciseCheckResponse checkResp = client.execute(checkReq);
+OptionExerciseCheckItem checkItem = checkResp.getItem();
+
+// 放弃行权时可传价内率阈值（0-10，仅 Expire 适用）
+OptionExerciseCheckRequest expireCheck = OptionExerciseCheckRequest
+        .buildRequest(account, optContractId, OptionExerciseType.Expire)
+        .setItmRate(5);
+
+// 2. 查询可行权持仓 / Exercisable positions
+OptionExercisePositionResponse posResp = client.execute(
+        OptionExercisePositionRequest.buildRequest(account, OptionExerciseType.Exercise));
+OptionExercisePositionPageItem posPage = posResp.getItem();
+
+// 3. 提交行权 / Submit exercise
+OptionExerciseSubmitResponse submitResp = client.execute(
+        OptionExerciseSubmitRequest.buildExerciseRequest(
+                account, optContractId, 1.0D, "2026-08-21", Boolean.FALSE));
+
+// 提交放弃行权 / Submit expire
+OptionExerciseSubmitResponse expireResp = client.execute(
+        OptionExerciseSubmitRequest.buildExpireRequest(account, optContractId, 1.0D, 5));
+
+// 4. 查询行权申请记录（分页）/ Records
+OptionExerciseRecordResponse recordResp = client.execute(
+        OptionExerciseRecordRequest.buildRequest(account, 1, 10));
+OptionExerciseRecordPageItem recordPage = recordResp.getItem();
+
+// 5. 撤销行权申请 / Cancel
+Long exerciseRecordId = 987654321L;
+OptionExerciseCancelResponse cancelExResp = client.execute(
+        OptionExerciseCancelRequest.buildRequest(account, exerciseRecordId));
+```
+
+`OptionExerciseType` 枚举只有两个值，**注意大小写**（`.name()` 直接上报服务端）：
+`Exercise`（提前行权）、`Expire`（提前放弃行权）。不是 `EXERCISE` / `EXPIRE`。
+The enum values are `Exercise` / `Expire` — mixed case is load-bearing.
+
+`OptionExerciseSubmitResponse` 与 `OptionExerciseCancelResponse` **没有 item 字段**，
+成功时只需检查 `isSuccess()`。
+Those two responses carry no business data — just check `isSuccess()`.
+
+> ⚠️ SDK CHANGELOG 提到的 `OptionExercisePageRequest` 不存在，
+> 实际类名是 `OptionExerciseRecordRequest`。
+> `OptionExercisePageRequest` (per the CHANGELOG) does not exist.
+
+---
 
 ### 期权多腿订单 / Multi-Leg Option Order
 

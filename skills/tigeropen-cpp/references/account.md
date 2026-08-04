@@ -9,6 +9,8 @@
 ```cpp
 #include "tigerapi/client_config.h"
 #include "tigerapi/trade_client.h"
+#include "tigerapi/contract_util.h"
+#include "tigerapi/order_util.h"
 
 using namespace TIGER_API;
 
@@ -20,15 +22,12 @@ auto trade_client = make_shared<TradeClient>(config);
 
 ## 账户列表 / Account List
 
-API 名称 / API name: `ACCOUNTS`
+SDK 方法 / SDK method: `get_accounts()`
 
 ```cpp
-#include "tigerapi/tiger_client.h"
-
-value obj = value::object(true);
-// 不传 account 返回所有账号（综合、环球、模拟）
-// Omit account to return all accounts (standard, global, paper)
-value result = trade_client->post(ACCOUNTS, obj);
+// SDK 已封装 get_accounts()，返回所有账号（综合、环球、模拟）
+// The SDK wraps this API; it returns all accounts (standard, global, paper).
+value result = trade_client->get_accounts();
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -45,13 +44,11 @@ ucout << result << endl;
 ### 环球账户 / Global Account (ASSETS)
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("DU000001"));
-// 可选参数 / Optional params:
-// obj[U("segment")] = value::boolean(true);      // 按证券/期货分类
-// obj[U("market_value")] = value::boolean(true); // 按市场分市值（仅环球）
-
-value result = trade_client->post(ASSETS, obj);
+// SDK 已封装 get_asset(account="", sub_accounts=array(), segment=false, market_value=false)
+// The SDK wraps this API; no raw post() needed.
+// segment      - 按证券/期货分类 / group by security vs future segment
+// market_value - 按市场分市值（仅环球）/ per-market values (global accounts only)
+value result = trade_client->get_asset(U("DU000001"), value::array(), true, true);
 ucout << result << endl;
 
 // 主要返回字段 / Key response fields:
@@ -70,13 +67,18 @@ ucout << result << endl;
 ### 综合/模拟账号 / Standard/Paper Account (PRIME_ASSETS)
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("base_currency")] = value::string(U("USD"));
-obj[U("consolidated")] = value::boolean(true);  // SEC+FUND聚合显示
-
-value result = trade_client->post(PRIME_ASSETS, obj);
+// SDK 已封装 get_prime_asset(account="", base_currency="USD")
+// 另有 Currency 枚举重载 / An overload taking the Currency enum also exists.
+// The SDK wraps this API; no raw post() needed.
+value result = trade_client->get_prime_asset(U("123456"), U("USD"));
 ucout << result << endl;
+
+// 枚举重载 / Enum overload:
+// value r2 = trade_client->get_prime_asset(U("123456"), Currency::USD);
+
+// ⚠️ wrapper 未开放 consolidated（SEC+FUND 聚合显示）参数，
+// 需要该字段时才退回裸 post(PRIME_ASSETS, obj)。
+// The wrapper does not expose `consolidated`; use raw post() if you need it.
 
 // segments 数组主要字段 / Segment key fields:
 // category            - S（证券）/ C（期货）/ F（基金）/ D（数字货币）
@@ -96,13 +98,15 @@ ucout << result << endl;
 ## 账户持仓 / Account Positions
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-// obj[U("sec_type")] = value::string(U("STK"));  // STK/OPT/FUT，默认STK
-// obj[U("currency")] = value::string(U("ALL"));  // ALL/USD/HKD/CNH
-// obj[U("market")] = value::string(U("ALL"));    // ALL/US/HK/CN
+// SDK 已封装 get_positions(account, sec_type="", currency="ALL", market="ALL", symbol="", ...)
+// 另有 SecType / Currency / Market 枚举重载
+// The SDK wraps this API; enum overloads (SecType/Currency/Market) also exist.
+value result = trade_client->get_positions(U("123456"), U("STK"), U("ALL"), U("ALL"));
+ucout << result << endl;
 
-value result = trade_client->post(POSITIONS, obj);
+// 枚举重载 / Enum overload:
+// value r2 = trade_client->get_positions(U("123456"), SecType::STK,
+//                                       Currency::ALL, Market::ALL);
 
 // 返回数组，每条持仓主要字段 / Key position fields:
 // symbol        - 股票代码
@@ -118,11 +122,7 @@ value result = trade_client->post(POSITIONS, obj);
 ### 期权持仓 / Option Positions
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("sec_type")] = value::string(U("OPT"));
-
-value result = trade_client->post(POSITIONS, obj);
+value result = trade_client->get_positions(U("123456"), U("OPT"), U("ALL"), U("ALL"));
 // 期权持仓额外字段：strike（行权价）, expiry（到期日）, right（CALL/PUT）
 ```
 
@@ -131,14 +131,13 @@ value result = trade_client->post(POSITIONS, obj);
 ## 历史资产分析 / Asset Analytics (PnL History)
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("start_date")] = value::string(U("2024-01-01"));
-obj[U("end_date")] = value::string(U("2024-01-31"));
-// obj[U("seg_type")] = value::string(U("SEC"));  // SEC / FUT
-// obj[U("currency")] = value::string(U("USD"));
-
-value result = trade_client->post(PRIME_ANALYTICS_ASSET, obj);
+// SDK 已封装 get_analytics_asset(account, start_date, end_date,
+//                                seg_type="SEC", currency="USD", sub_account="")
+// The SDK wraps this API; no raw post() needed.
+value result = trade_client->get_analytics_asset(U("123456"),
+                                                U("2026-01-01"), U("2026-01-31"),
+                                                U("SEC"), U("USD"));
+ucout << result << endl;
 
 // summary 字段 / Summary fields:
 // pnl                - 盈亏金额
@@ -160,15 +159,14 @@ value result = trade_client->post(PRIME_ANALYTICS_ASSET, obj);
 ## 最大可交易数量 / Estimate Tradable Quantity
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("symbol")] = value::string(U("AAPL"));
-obj[U("sec_type")] = value::string(U("STK"));
-obj[U("action")] = value::string(U("BUY"));
-obj[U("order_type")] = value::string(U("LMT"));
-obj[U("limit_price")] = value::number(150.0);
+// SDK 已封装 get_estimate_tradable_quantity(order, seg_type="SEC")
+// 入参是一个 Order 对象，SDK 内部拆出 symbol/sec_type/action/limit_price 等字段
+// The SDK wraps this API; pass an Order and it extracts the request fields.
+Contract est_contract = ContractUtil::stock_contract(U("AAPL"), U("USD"));
+Order est_order = OrderUtil::limit_order(U("123456"), est_contract, U("BUY"), 100, 150.0);
 
-value result = trade_client->post(ESTIMATE_TRADABLE_QUANTITY, obj);
+value result = trade_client->get_estimate_tradable_quantity(est_order, U("SEC"));
+ucout << result << endl;
 
 // 返回字段 / Response fields:
 // tradableQuantity          - 现金可买/卖数量
@@ -184,26 +182,21 @@ value result = trade_client->post(ESTIMATE_TRADABLE_QUANTITY, obj);
 ### 查询可转出金额 / Query Available Amount
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("from_segment")] = value::string(U("SEC"));  // SEC / FUT
-obj[U("currency")] = value::string(U("USD"));
-
-value result = trade_client->post(SEGMENT_FUND_AVAILABLE, obj);
+// SDK 已封装 get_segment_fund_available(from_segment, currency="USD")
+// account 由 ClientConfig 提供，无需显式传入
+// The SDK wraps this API; the account comes from ClientConfig.
+value result = trade_client->get_segment_fund_available(U("SEC"), U("USD"));  // SEC / FUT
+ucout << result << endl;
 // fromSegment, currency, amount
 ```
 
 ### 发起转账 / Transfer
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("from_segment")] = value::string(U("SEC"));
-obj[U("to_segment")] = value::string(U("FUT"));
-obj[U("currency")] = value::string(U("USD"));
-obj[U("amount")] = value::number(1000.0);
-
-value result = trade_client->post(SEGMENT_FUND_TRANSFER, obj);
+// SDK 已封装 transfer_segment_fund(from_segment, to_segment, amount, currency="USD")
+// The SDK wraps this API; no raw post() needed.
+value result = trade_client->transfer_segment_fund(U("SEC"), U("FUT"), 1000.0, U("USD"));
+ucout << result << endl;
 // 转账状态 / Transfer status: NEW / PROC / SUCC / FAIL / CANC
 ```
 
@@ -212,10 +205,10 @@ value result = trade_client->post(SEGMENT_FUND_TRANSFER, obj);
 ## 出入金记录 / Deposit & Withdrawal Records
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-
-value result = trade_client->post(DEPOSIT_WITHDRAW, obj);
+// SDK 已封装 get_funding_history(seg_type="")，内部走 TRANSFER_FUND
+// The SDK wraps this API as get_funding_history() (posts to TRANSFER_FUND).
+value result = trade_client->get_funding_history(U("SEC"));  // SEC / FUT，留空返回全部
+ucout << result << endl;
 
 // 每条记录字段 / Record fields:
 // type         - 1(入金) / 3(出金) / 20(出金费用) 等
@@ -229,8 +222,9 @@ value result = trade_client->post(DEPOSIT_WITHDRAW, obj);
 
 ## 注意事项 / Notes
 
-- 环球账户(Global)使用 `ASSETS`，综合/模拟账户(Standard/Paper)使用 `PRIME_ASSETS`
+- 环球账户(Global)使用 `get_asset()`，综合/模拟账户(Standard/Paper)使用 `get_prime_asset()`
 - Segment 分类：S=证券, C=期货, F=基金, D=数字货币
 - 持仓中 `positionQty` 为正确字段，旧字段 `position`+`positionScale` 已废弃
 - 维持保证金 `maintainMargin` < 0 时会被强制平仓
-- 机构用户（sub_account / secret_key）可在 obj 中额外传入对应字段
+- 机构用户的 `secret_key` 由 SDK wrapper 自动注入（`set_secret_key`），`sub_account` 通过
+  wrapper 的对应参数传入；wrapper 未开放的字段才退回裸 `post(CONSTANT, obj)`

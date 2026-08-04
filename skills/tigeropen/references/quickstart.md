@@ -10,7 +10,7 @@ The Tiger Open Platform Python SDK (tigeropen) provides trading and market data 
 
 - 官方文档 / Docs: https://docs.itigerup.com/docs/prepare
 - GitHub: https://github.com/tigerfintech/openapi-python-sdk
-- SDK Version: 3.5.6 | Python: 3.8 - 3.14
+- SDK Version: 3.7.0 | Python: 3.8 - 3.14
 
 ### 支持的市场和品种 / Supported Markets
 
@@ -27,6 +27,21 @@ The Tiger Open Platform Python SDK (tigeropen) provides trading and market data 
 市价单 MKT, 限价单 LMT, 止损单 STP, 止损限价单 STP_LMT, 跟踪止损单 TRAIL, 附加订单(止盈止损), 算法单 TWAP/VWAP
 
 ## 安装 / Installation
+
+### 一键安装脚本 / One-line Installer
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.sh | sh
+
+# Windows (PowerShell) — 在 PowerShell 中运行 / Run in PowerShell
+irm https://raw.githubusercontent.com/tigerfintech/openapi-python-sdk/master/install.ps1 | iex
+```
+
+脚本自动检测并选择最佳安装方式（uv > pipx > pip），并自动配置 PATH。
+The script auto-detects and uses the best method (uv > pipx > pip) and configures PATH.
+
+### 手动安装 / Manual Install
 
 ```bash
 pip install tigeropen
@@ -161,8 +176,8 @@ client_config.account = 'your_paper_account'  # 17位数字模拟账号 / 17-dig
 # 模拟账户支持美股/港股/A股/期权
 ```
 
-> `sandbox_debug` 参数已废弃，请勿使用。SDK 通过账号自动识别模拟账户。
-> `sandbox_debug` is deprecated. SDK auto-detects paper accounts by account number.
+> 模拟账户无需额外开关，SDK 依账号自动识别。
+> No extra flag is needed for paper accounts; the SDK detects them from the account number.
 
 ## 完整入门示例 / Complete Quickstart
 
@@ -195,7 +210,9 @@ for s in status:
 briefs = quote_client.get_stock_briefs(['AAPL', 'TSLA'])
 # get_stock_briefs returns a pandas DataFrame
 for _, b in briefs.iterrows():
-    print(f"{b['symbol']}: price={b['latest_price']}, change={b['change_percentage']}%")
+    # DataFrame 无 change_percentage 列，需自行计算 / No change_percentage column; compute manually
+    pct = (b['latest_price'] - b['pre_close']) / b['pre_close'] * 100 if b['pre_close'] else 0
+    print(f"{b['symbol']}: price={b['latest_price']}, change={pct:.2f}%")
 
 # 5. 获取K线 / Get K-line data
 bars = quote_client.get_bars(['AAPL'], period=BarPeriod.DAY, limit=30)
@@ -227,19 +244,29 @@ for p in positions:
 
 ```python
 from tigeropen.common.consts import (
-    Market,        # ALL, US, HK, CN, SG, AU
-    SecurityType,  # STK, OPT, FUT, WAR, IOPT, CASH, FUND, MLEG, CC
-    Currency,      # USD, HKD, CNH, SGD, AUD
+    Market,        # ALL, US, HK, CN, SG
+    SecurityType,  # ALL, STK, OPT, WAR, IOPT, FUT, FOP, CASH, MLEG, FUND, CC
+    Currency,      # ALL, USD, HKD, CNH, SGD
     Language,      # zh_CN, zh_TW, en_US
-    OrderType,     # MKT, LMT, STP, STP_LMT, TRAIL, TWAP, VWAP
-    OrderStatus,   # Initial, PendingSubmit, Submitted, PartiallyFilled, Filled, Cancelled, Inactive, PendingCancel
+    OrderType,     # MKT, LMT, STP, STP_LMT, TRAIL, AM, AL, TWAP, VWAP, OCA, ICEBERG
+    OrderStatus,   # PENDING_NEW, NEW, HELD, PARTIALLY_FILLED, FILLED,
+                   # CANCELLED, PENDING_CANCEL, REJECTED, EXPIRED
     BarPeriod,     # DAY, WEEK, MONTH, YEAR, ONE_MINUTE, THREE_MINUTES, FIVE_MINUTES, TEN_MINUTES,
                    # FIFTEEN_MINUTES, HALF_HOUR, FORTY_FIVE_MINUTES, ONE_HOUR, TWO_HOURS, THREE_HOURS, FOUR_HOURS, SIX_HOURS
     QuoteRight,    # BR(前复权/forward), NR(不复权/none)
-    TradingSession,  # PreMarket, Regular, AfterHours
-    TimeInForce,   # DAY, GTC, GTD
+    TradingSession,  # All, PreMarket, Regular, AfterHours, OverNight
 )
+# 订单有效期没有枚举，直接传字符串 'DAY' / 'GTC'
+# No TimeInForce enum — pass the string 'DAY' or 'GTC'
 ```
+
+> ⚠️ **OrderStatus 的成员名与取值不同**：成员名是大写下划线式（`OrderStatus.FILLED`），
+> 而 `.value` 是驼峰式服务端值（`'Filled'`）。对照关系：
+> `NEW='Initial'`、`HELD='Submitted'`、`REJECTED='Inactive'`、`EXPIRED='Invalid'`，
+> 其余成员的值与名称同义。写代码用成员名，比对接口原始返回值用 `.value`。
+> Member names are UPPER_SNAKE (`OrderStatus.FILLED`); `.value` holds the CamelCase
+> server string (`'Filled'`). Note `NEW='Initial'`, `HELD='Submitted'`,
+> `REJECTED='Inactive'`, `EXPIRED='Invalid'`.
 
 ### SecurityType 证券类型
 
@@ -274,15 +301,24 @@ from tigeropen.common.consts import (
 
 ### Market Scanner 相关枚举
 
+四个字段类在 **`tigeropen.common.consts.filter_fields`**，`SortDirection` 在
+`tigeropen.common.consts`；成员名大小写敏感，需照抄源码。
+The four field classes live in `consts.filter_fields`; member names are case-sensitive.
+
 ```python
-from tigeropen.common.consts import (
-    StockField,       # stockField: Change, ChangeRate, LatestPrice, Volume, Amount, TurnoverRate, FloatShare, FloatMarketValue...
-    AccumulateField,  # accumulateField: ChangeRate, Amount, Volume
-    FinancialField,   # financialField: TotalRevenue, NetIncome, EpsDiluted, ROE, PE_TTM, PB...
-    MultiTagField,    # multiTagField: HasOption, IsETF, IndustryCode, ExchangeCode
-    SortDirection,    # ASC, DESC
+from tigeropen.common.consts.filter_fields import (
+    StockField,       # 65 项，如 CurPrice, OpenPrice, Volume, Amount, MarketValue, FloatMarketVal, PeTTM, TurnoverRate, ttm_Eps
+    AccumulateField,  # 26 项，如 ChangeRate, ChangeValue, ROE, Eps, Net_Income, Total_Revenue（需 accumulate_period）
+    FinancialField,   # 68 项,如 TotalRevenue, OperatingIncome, NetIncome1YrGrowth, TotalAssetTurnover, InventoryTurnover
+    MultiTagField,    # 24 项,如 Industry, Concept, OptionsAvailable, ETF_TYPE, Week52HighFlag, TradeCurrency
 )
+from tigeropen.common.consts import SortDirection  # NO, ASC, DESC
 ```
+
+> 常见误写：`ChangeRate` / `LatestPrice` 不在 `StockField` 中——盘中涨跌幅用
+> `StockField.current_ChangeRate`，最新价用 `StockField.CurPrice`。
+> `ChangeRate`/`LatestPrice` are NOT `StockField` members; use
+> `StockField.current_ChangeRate` and `StockField.CurPrice`.
 
 ## 核心对象参考 / Key Object Reference
 
@@ -484,6 +520,5 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 - `QuoteClient` 应创建一次并复用 / Create once and reuse
 - 行情权限需单独购买，API 与 App 独立 / Quote permissions require separate purchase
 - 交易佣金与 App 一致，无额外 API 费用 / Trading fees same as app
-- `sandbox_debug` 参数已废弃，请勿使用 / `sandbox_debug` is deprecated, do not use
 - 官方文档 / Official docs: https://docs.itigerup.com/docs/prepare
 - 官方支持群 / Support: https://t.me/TigerBrokersAPISupport

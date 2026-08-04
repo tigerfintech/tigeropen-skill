@@ -10,14 +10,14 @@
 
 ### 查询期权 / Query Options
 
-1. **查到期日 Get expirations**: `qc.OptionExpirations()` → 获取可选到期日列表
-2. **查期权链 Get chain**: `qc.OptionChain()` → 获取指定到期日的所有合约
-3. **查行情 Get quotes**: `qc.OptionBriefs()` → 获取期权实时行情和 Greeks
+1. **查到期日 Get expirations**: `qc.GetOptionExpiration()` → 获取可选到期日列表
+2. **查期权链 Get chain**: `qc.GetOptionChain()` / `qc.GetOptionChainByReq()` → 获取指定到期日的所有合约
+3. **查行情 Get quotes**: `qc.GetOptionBrief()` / `qc.GetOptionQuote()` → 获取期权实时行情和 Greeks
 
 ### 港股期权特殊处理 / HK Option Special Handling
 
 - 港股期权标的代码不同于正股 / HK option underlyings differ from stock codes: `00700` → `TCH`（腾讯）
-- 使用 `qc.OptionSymbols()` 查询港股期权代码映射
+- 使用 `qc.GetOptionSymbols()` 查询港股期权代码映射
 
 ---
 
@@ -25,10 +25,11 @@
 
 ```go
 import (
-    "github.com/tigerfintech/openapi-sdks/go/config"
-    "github.com/tigerfintech/openapi-sdks/go/client"
-    "github.com/tigerfintech/openapi-sdks/go/quote"
-    "github.com/tigerfintech/openapi-sdks/go/trade"
+    "github.com/tigerfintech/openapi-go-sdk/client"
+    "github.com/tigerfintech/openapi-go-sdk/config"
+    "github.com/tigerfintech/openapi-go-sdk/model"
+    "github.com/tigerfintech/openapi-go-sdk/quote"
+    "github.com/tigerfintech/openapi-go-sdk/trade"
 )
 
 cfg, err := config.NewClientConfig(
@@ -39,141 +40,97 @@ qc := quote.NewQuoteClient(httpClient)
 tc := trade.NewTradeClient(httpClient, cfg.Account)
 ```
 
+> **入参约定 / Request convention**: 方法接收位置参数或 `model.XxxRequest` **结构体**，
+> 不能传 `map[string]interface{}`；返回**强类型结构体**。
+> Methods take positional args or a typed `model.XxxRequest` struct — not a map.
+
 ---
 
 ## 期权到期日 / Option Expirations
 
 ```go
-result, err := qc.OptionExpirations(map[string]interface{}{
-    "symbols": []string{"AAPL"},
-    "market":  "US",   // US / HK
-})
-
-var expirations []map[string]interface{}
-json.Unmarshal(result, &expirations)
-
-// 返回字段 / Response fields:
-// symbol     - 股票代码
-// count      - 到期日数量
-// dates      - 到期日数组 (e.g. "2024-06-28")
-// timestamps - 到期日时间戳数组（毫秒，纽约时间）
-// periodTags - 周期标签: "m"=月期权, "w"=周期权, "q"=季度
+// 第一个参数是 symbol 切片；market 是可变参数，可省略
+expirations, err := qc.GetOptionExpiration([]string{"AAPL"}, "US")
+for _, e := range expirations {
+    fmt.Println(e.Symbol, e.Dates, e.Timestamps, e.Periods)
+}
 ```
+
+返回 `[]model.OptionExpiration`。字段：`Symbol`、`OptionSymbols`、`Dates`（到期日字符串列表）、
+`Timestamps`（毫秒时间戳列表）、`Periods`（周期标签，`m`=月期权 / `w`=周期权 / `q`=季度）、`Counts`。
 
 ---
 
 ## 期权链 / Option Chain
 
+### 简单查询 / Simple form
+
 ```go
-result, err := qc.OptionChain(map[string]interface{}{
-    "symbol":  "AAPL",
-    "expiry":  "2025-08-29",
-    "market":  "US",
-    "return_greek_value": true,   // 返回希腊字母 / Return Greeks
-    // 可选筛选 / Optional filters:
-    // "in_the_money": true,
-    // "implied_volatility_min": 0.15,
-    // "implied_volatility_max": 0.80,
-    // "delta_min": 0.2,
-    // "delta_max": 0.8,
-    // "open_interest_min": 100,
-})
-
-var chainItems []map[string]interface{}
-json.Unmarshal(result, &chainItems)
-
-// 返回字段 / Response fields (items[].call / items[].put):
-// identifier   - 期权完整代码 (e.g. "AAPL  250829C00150000")
-// strike       - 行权价
-// right        - "CALL" / "PUT"
-// askPrice     - 卖价
-// bidPrice     - 买价
-// latestPrice  - 最新价
-// volume       - 成交量
-// openInterest - 持仓量
-// impliedVol   - 隐含波动率
-// delta/gamma/theta/vega/rho - 希腊字母（需 return_greek_value=true）
+// items 是 [][2]string，每项为 {symbol, expiry}
+chains, err := qc.GetOptionChain([][2]string{{"AAPL", "2026-08-21"}})
 ```
+
+### 带 Greeks 与筛选 / With Greeks and filters
+
+```go
+returnGreek := true
+chainsWithGreeks, err := qc.GetOptionChainByReq(model.OptionChainRequest{
+    // 注意 OptionQueryItem.Expiry 是 int64 毫秒时间戳
+    OptionBasic:      []model.OptionQueryItem{{Symbol: "AAPL", Expiry: 1787356800000}},
+    ReturnGreekValue: &returnGreek,
+    Market:           "US",
+})
+```
+
+筛选条件通过 `OptionFilter *model.OptionChainFilter` 传入（如隐含波动率、Delta、持仓量范围）。
+
+返回 `[]model.OptionChain`，每项含 call/put 合约：`Identifier`、`Strike`、`Right`、
+`AskPrice`/`BidPrice`、`LatestPrice`、`Volume`、`OpenInterest`、隐含波动率与
+`Delta`/`Gamma`/`Theta`/`Vega`/`Rho`（需 `ReturnGreekValue=true`）。
 
 ---
 
 ## 港股期权代码映射 / HK Option Symbol Mapping
 
 ```go
-result, err := qc.OptionSymbols(map[string]interface{}{
-    "market": "HK",
-    "lang":   "en_US",   // en_US / zh_CN / zh_TW
+optSymbols, err := qc.GetOptionSymbols(model.OptionSymbolsRequest{
+    Market: "HK",
+    Lang:   "en_US",  // en_US / zh_CN / zh_TW
 })
-
-var symbols []map[string]interface{}
-json.Unmarshal(result, &symbols)
-
-// 返回字段 / Response fields:
-// symbol           - 期权 symbol (e.g. "TCH.HK")
-// name             - 标的名称
-// underlyingSymbol - 正股代码 (e.g. "00700")
-
-// 然后使用映射后的代码查询港股期权 / Then use mapped symbol for HK queries
+// 返回 []model.OptionSymbol：期权 symbol（如 "TCH.HK"）、标的名称、正股代码（如 "00700"）
 ```
 
 ---
 
 ## 期权实时行情 / Option Brief (Real-time Quotes)
 
+按 identifier 查询 / Query by identifier:
+
 ```go
-result, err := qc.OptionBriefs(map[string]interface{}{
-    "market": "US",
-    "option_basic": []map[string]interface{}{
-        {
-            "symbol": "AAPL",
-            "right":  "CALL",
-            "expiry": "2025-08-29",   // yyyy-MM-dd
-            "strike": "150.0",         // 小数位须和期权链一致
-        },
-    },
-})
+optBriefs, err := qc.GetOptionBrief([]string{"AAPL  260821C00150000"})
 
-var briefs []map[string]interface{}
-json.Unmarshal(result, &briefs)
-
-// 返回字段 / Response fields:
-// identifier    - 期权完整代码
-// symbol        - 标的代码
-// bidPrice/askPrice/latestPrice
-// volume/openInterest
-// high/low/open/preClose
-// change        - 涨跌额
-// midPrice      - 中间价
-// markPrice     - 标记价格
-// sellingReturn - 卖出年化收益率
+// GetOptionQuote 支持可选 timezone 参数
+optQuotes, err := qc.GetOptionQuote([]string{"AAPL  260821C00150000"}, "US/Eastern")
 ```
+
+期权代码格式：标的（6 位，右侧空格填充）+ YYMMDD + C/P + 行权价×1000（8 位）。
+
+返回 `[]model.Brief`，期权相关字段：`Identifier`、`Strike`、`Right`、`Expiry`（**int64 毫秒**）、
+`Multiplier`、`OpenInterest`、`BidPrice`/`AskPrice`/`LatestPrice`、`Volume`、
+`High`/`Low`/`Open`/`PreClose`、`Change`。
 
 ---
 
 ## 期权深度行情 / Option Depth Quotes
 
 ```go
-result, err := qc.OptionDepth(map[string]interface{}{
-    "market": "US",
-    "option_basic": []map[string]interface{}{
-        {
-            "symbol": "AAPL",
-            "right":  "PUT",
-            "expiry": "2024-06-28",
-            "strike": "210.0",
-        },
+optDepth, err := qc.GetOptionDepth(model.OptionDepthRequest{
+    OptionBasic: []model.OptionQueryItem{
+        {Symbol: "AAPL", Right: "PUT", Expiry: 1787356800000, Strike: "210.0"},
     },
+    Market: "US",
 })
-
-var depth []map[string]interface{}
-json.Unmarshal(result, &depth)
-
-// 返回字段 / Response fields:
-// ask[]/bid[] - 卖/买盘挂单列表
-//   price    - 委托价
-//   volume   - 委托量
-//   code     - 交易所代码 (CBOE, PHLX 等)
-//   timestamp - 交易所时间
+// 返回 []model.Depth：Asks / Bids，每档含 Price、Volume、Count
 ```
 
 ---
@@ -182,26 +139,13 @@ json.Unmarshal(result, &depth)
 
 ```go
 // 仅支持美股期权 / US market only
-
-result, err := qc.OptionTradeTicks(map[string]interface{}{
-    "option_basic": []map[string]interface{}{
-        {
-            "symbol": "AAPL",
-            "right":  "PUT",
-            "expiry": "2024-03-08",
-            "strike": "185.0",
-        },
+// 注意字段名是 Contracts（不是 OptionBasic）
+optTicks, err := qc.GetOptionTradeTicks(model.OptionTradeTicksRequest{
+    Contracts: []model.OptionQueryItem{
+        {Symbol: "AAPL", Right: "PUT", Expiry: 1787356800000, Strike: "185.0"},
     },
 })
-
-var ticks []map[string]interface{}
-json.Unmarshal(result, &ticks)
-
-// 返回字段 / Response fields:
-// items[] - 逐笔成交列表
-//   price  - 成交价
-//   volume - 成交量
-//   time   - 成交时间（毫秒）
+// 返回 []model.TradeTick：Items 中每笔含 Time、Price、Volume、Type
 ```
 
 ---
@@ -209,33 +153,24 @@ json.Unmarshal(result, &ticks)
 ## 期权K线 / Option K-line
 
 ```go
-result, err := qc.OptionKline(map[string]interface{}{
-    "market": "US",
-    "option_query": []map[string]interface{}{
-        {
-            "symbol":     "AAPL",
-            "right":      "CALL",
-            "expiry":     "2024-06-28",
-            "strike":     "170.0",
-            "begin_time": "2024-06-26",
-            "end_time":   "2024-06-26 23:59:59",
-            "period":     "1min",   // day/1min/5min/30min/60min
-            "limit":      10,
-            "sort_dir":   "DESC",
-        },
-    },
-})
+// 位置参数：identifiers, period, beginTime, endTime（毫秒），timezone 可选
+optKlines, err := qc.GetOptionKline(
+    []string{"AAPL  260821C00150000"},
+    "1min",           // day/1min/5min/30min/60min
+    1787270400000,    // beginTime 毫秒
+    1787356800000,    // endTime 毫秒
+)
 
-var klines []map[string]interface{}
-json.Unmarshal(result, &klines)
-
-// 返回字段 / Response fields:
-// items[] - K线数据点列表
-//   open/high/low/close - 开高低收
-//   volume              - 成交量
-//   time                - 时间戳（毫秒）
-//   openInterest        - 持仓量（仅日K线）
+// 需要 limit / 排序方向时用 WithOpts 变体
+optKlines2, err := qc.GetOptionKlineWithOpts(
+    []string{"AAPL  260821C00150000"},
+    "1min", 1787270400000, 1787356800000, 10, "DESC",
+)
 ```
+
+> `beginTime` / `endTime` 是**必填**位置参数（0.4.6 起）/ They are **required** positional args.
+
+返回 `[]model.Kline`，`Items` 中每根含 `Time`、`Open`、`High`、`Low`、`Close`、`Volume`。
 
 ---
 
@@ -243,29 +178,14 @@ json.Unmarshal(result, &klines)
 
 ```go
 // 目前仅支持港股期权 / HK market only currently
-
-result, err := qc.OptionTimeline(map[string]interface{}{
-    "market": "HK",
-    "option_list": []map[string]interface{}{
-        {
-            "symbol": "ALB.HK",
-            "right":  "CALL",
-            "expiry": int64(1753878054000),   // 毫秒时间戳
-            "strike": "117.50",
-        },
+// 注意字段名是 OptionQuery
+optTimeline, err := qc.GetOptionTimeline(model.OptionTimelineRequest{
+    OptionQuery: []model.OptionQueryItem{
+        {Symbol: "ALB.HK", Right: "CALL", Expiry: 1753878054000, Strike: "117.50"},
     },
+    Market: "HK",
 })
-
-var timeline []map[string]interface{}
-json.Unmarshal(result, &timeline)
-
-// 返回字段 / Response fields:
-// preClose   - 昨日收盘价
-// minutes[]  - 分时数据点
-//   price    - 最新价
-//   avgPrice - 均价
-//   volume   - 成交量
-//   time     - 时间戳（毫秒）
+// 返回 []model.Timeline：PreClose 与按时段分桶的 Intraday / PreHours / AfterHours
 ```
 
 ---
@@ -273,134 +193,84 @@ json.Unmarshal(result, &timeline)
 ## 期权分析 / Option Analysis
 
 ```go
-result, err := qc.OptionAnalysis(map[string]interface{}{
-    "symbols": []map[string]interface{}{
+requireVol := true
+analysis, err := qc.GetOptionAnalysis(model.OptionAnalysisRequest{
+    // Symbols 是 []model.OptionAnalysisSymbol（0.4.7 起，不再是 []string）
+    Symbols: []model.OptionAnalysisSymbol{
         {
-            "symbol":                "AAPL",
-            "period":                "52week",   // 3year/52week/26week/13week
-            "requireVolatilityList": true,        // 返回IV/HV历史时序
+            Symbol:                "AAPL",
+            Period:                "52week",  // 3year/52week/26week/13week
+            RequireVolatilityList: &requireVol,
         },
     },
-    "market": "US",
+    Market: "US",
 })
-
-var analysis []map[string]interface{}
-json.Unmarshal(result, &analysis)
-
-// 返回字段 / Response fields:
-// symbol           - 标的代码
-// impliedVol30Days - 30日隐含波动率
-// hisVolatility    - 历史波动率（30天）
-// ivHisVRatio      - IV/HV 比率
-// callPutRatio     - Call/Put 比率
-// impliedVolMetric:
-//   percentile  - IV百分位（0%-100%）
-//   rank        - IV排名（0-1）
-//   period      - 分析周期
 ```
 
----
+返回 `[]model.OptionAnalysis`，含 30 日隐含波动率、历史波动率、IV/HV 比率、
+Call/Put 比率、IV 百分位与排名。
 
-## 期权指标计算 / Option Indicator Calculation
-
-```go
-result, err := qc.OptionIndicator(map[string]interface{}{
-    "symbol": "BABA",
-    "right":  "CALL",
-    "strike": "205.0",
-    "expiry": "2019-11-01",   // yyyy-MM-dd
-})
-
-var indicator map[string]interface{}
-json.Unmarshal(result, &indicator)
-
-// 返回字段 / Response fields:
-// delta/gamma/theta/vega/rho - 希腊字母
-// insideValue      - 内在价值
-// timeValue        - 时间价值
-// leverage         - 杠杆率
-// openInterest     - 未平仓量
-// historyVolatility - 历史波动率（百分比，如24.38表示24.38%）
-// volatility       - 隐含波动率（百分比）
-// premiumRate      - 溢价率（百分比）
-// profitRate       - 买入盈利率（百分比）
-```
+> `RequireVolatilityList` 是 `*bool`，需先声明变量再取地址 / It is a `*bool`.
 
 ---
 
 ## 单腿期权下单 / Single-leg Option Order
 
 ```go
-// 买入看涨期权 / Buy call option
-result, err := tc.PlaceOrder(map[string]interface{}{
-    "account": cfg.Account,
-    "contract": map[string]interface{}{
-        "symbol":   "AAPL",
-        "sec_type": "OPT",
-        "expiry":   "20250829",   // YYYYMMDD
-        "strike":   150.0,
-        "right":    "CALL",
-        "currency": "USD",
-    },
-    "action":      "BUY",
-    "order_type":  "LMT",
-    "limit_price": 5.0,
-    "quantity":    1,             // 1张 = 100股
-})
+account := cfg.Account
 
-var order map[string]interface{}
-json.Unmarshal(result, &order)
+// 买入看涨期权 / Buy call option（1 张 = 100 股）
+optOrder := model.LimitOrder(account, "AAPL", "OPT", "BUY", 1, 5.0)
+optOrder.Expiry = "20260821"  // YYYYMMDD
+optOrder.Strike = "150.0"
+optOrder.Right = "CALL"
+optOrder.Currency = "USD"
+
+preview, err := tc.PreviewOrder(optOrder)
+placed, err := tc.PlaceOrder(optOrder)
+```
+
+也可直接用 identifier / Or set the standard identifier:
+
+```go
+byIdentifier := model.LimitOrder(account, "AAPL", "OPT", "BUY", 1, 5.0)
+byIdentifier.Identifier = "AAPL  260821C00150000"
 ```
 
 ---
 
 ## 多腿组合策略 / Multi-leg Combo Strategies
 
+组合单用 `model.ComboOrder` 构造后交给 `PlaceOrder`，**没有** `PlaceComboOrder` 方法。
+Build with `model.ComboOrder` and submit via `PlaceOrder`; there is no `PlaceComboOrder`.
+
 ```go
 // 牛市看涨价差 / Bull Call Spread (VERTICAL)
-result, err := tc.PlaceComboOrder(map[string]interface{}{
-    "account":     cfg.Account,
-    "combo_type":  "VERTICAL",
-    "action":      "BUY",
-    "order_type":  "LMT",
-    "limit_price": 3.0,
-    "quantity":    1,
-    "legs": []map[string]interface{}{
-        {
-            "symbol":   "AAPL",
-            "sec_type": "OPT",
-            "expiry":   "20250829",
-            "strike":   145.0,
-            "right":    "CALL",
-            "action":   "BUY",
-            "ratio":    1,
-        },
-        {
-            "symbol":   "AAPL",
-            "sec_type": "OPT",
-            "expiry":   "20250829",
-            "strike":   155.0,
-            "right":    "CALL",
-            "action":   "SELL",
-            "ratio":    1,
-        },
-    },
-})
+spreadLegs := []model.ContractLegRequest{
+    model.NewContractLeg("AAPL", "OPT", "BUY", 1, "2026-08-21", "145.0", "CALL"),
+    model.NewContractLeg("AAPL", "OPT", "SELL", 1, "2026-08-21", "155.0", "CALL"),
+}
+// ComboOrder(account, action, orderType, quantity, legs, comboType, limitPrice, auxPrice, trailingPercent)
+spread := model.ComboOrder(account, "BUY", "LMT", 1, spreadLegs, "VERTICAL", 3.0, 0, 0)
+spreadResult, err := tc.PlaceOrder(spread)
 ```
 
 ### 其他策略示例 / Other Strategy Examples
 
 ```go
-// 跨式策略 / Straddle
-// combo_type: "STRADDLE"，同行权价 Call+Put，action: "BUY"
+// 跨式策略 / Straddle：同行权价 Call+Put
+straddleLegs := []model.ContractLegRequest{
+    model.NewContractLeg("AAPL", "OPT", "BUY", 1, "2026-08-21", "150.0", "CALL"),
+    model.NewContractLeg("AAPL", "OPT", "BUY", 1, "2026-08-21", "150.0", "PUT"),
+}
+straddle := model.ComboOrder(account, "BUY", "LMT", 1, straddleLegs, "STRADDLE", 8.0, 0, 0)
 
-// Iron Condor（4腿，使用 CUSTOM）
-// combo_type: "CUSTOM"，4条腿：Put spread + Call spread
-
-// 备兑策略 / Covered Call
-// combo_type: "COVERED"
-// Leg1: sec_type="STK", action="BUY", ratio=100
-// Leg2: sec_type="OPT", action="SELL", ratio=1
+// 备兑策略 / Covered Call：正股 + 卖出 Call
+coveredLegs := []model.ContractLegRequest{
+    model.NewContractLeg("AAPL", "STK", "BUY", 100, "", "", ""),
+    model.NewContractLeg("AAPL", "OPT", "SELL", 1, "2026-08-21", "160.0", "CALL"),
+}
+covered := model.ComboOrder(account, "BUY", "LMT", 1, coveredLegs, "COVERED", 0, 0, 0)
 ```
 
 ### 组合策略类型总览 / Combo Strategy Types
@@ -419,31 +289,54 @@ result, err := tc.PlaceComboOrder(map[string]interface{}{
 
 ---
 
+## 期权行权 / Option Exercise
+
+```go
+exercisable, err := tc.OptionExercisePositions(model.OptionExercisePositionRequest{
+    Account: account,
+})
+checked, err := tc.OptionExerciseCheck(model.OptionExerciseCheckRequest{Account: account})
+submitted, err := tc.OptionExerciseSubmit(model.OptionExerciseSubmitRequest{Account: account})
+exRecords, err := tc.OptionExerciseRecords(model.OptionExercisePageRequest{Account: account})
+exCancelled, err := tc.OptionExerciseCancel(model.OptionExerciseCancelRequest{Account: account})
+```
+
+`OptionExerciseSubmit` / `OptionExerciseCancel` 返回 `(bool, error)`。
+
+---
+
 ## 查询期权持仓 / Query Option Positions
 
 ```go
-result, err := tc.Positions(map[string]interface{}{
-    "account":  cfg.Account,
-    "sec_type": "OPT",
+optPositions, err := tc.Positions(model.PositionsRequest{
+    Account: account,
+    SecType: "OPT",
 })
-
-var positions []map[string]interface{}
-json.Unmarshal(result, &positions)
-
-// 期权持仓额外字段 / Option-specific position fields:
-// strike - 行权价
-// expiry - 到期日
-// right  - CALL/PUT
+for _, p := range optPositions {
+    fmt.Printf("%s identifier=%s multiplier=%.0f qty=%.2f mktValue=%.2f\n",
+        p.Symbol, p.Identifier, p.Multiplier, p.PositionQty, p.MarketValue)
+}
 ```
+
+`model.Position` 通过 `Identifier`（期权标准代码）和 `Multiplier` 表达期权合约，
+**没有** 独立的 `Strike`/`Expiry`/`Right` 字段——需要这些要素时请解析 `Identifier`，
+或用 `PositionsRequest` 的 `Expiry`/`Strike`/`Right` 作为**查询过滤条件**。
+`model.Position` carries option contracts via `Identifier` + `Multiplier`; there are no
+separate `Strike`/`Expiry`/`Right` fields on the response.
 
 ---
 
 ## 注意事项 / Notes
 
-- 所有 API 返回 `(json.RawMessage, error)`，需自行 `json.Unmarshal` 解析
-- 港股期权需先用 `OptionSymbols()` 获取代码映射 / HK options require symbol mapping
-- 期权每张合约通常代表100股标的 / Each contract = 100 shares
-- 期权链返回的 Greeks 为上一交易日收盘值，盘中请用 `OptionIndicator()` / Chain Greeks are from previous close
+- 方法接收位置参数或 `model.XxxRequest` 结构体，不接受 map；返回强类型结构体
+- **SDK 没有 `OptionIndicator` 方法**；单合约 Greeks 通过 `GetOptionChainByReq(ReturnGreekValue=true)`
+  或 `GetOptionBrief` 获取 / There is no `OptionIndicator` method
+- **SDK 没有 `PlaceComboOrder` 方法**；组合单用 `model.ComboOrder` + `PlaceOrder`
+- `model.OptionQueryItem.Expiry` 是 `int64` 毫秒时间戳，不是日期字符串
+- `GetOptionKline` 的 `beginTime`/`endTime` 是必填位置参数
+- `OptionAnalysisRequest.Symbols` 是 `[]model.OptionAnalysisSymbol`，不是 `[]string`
+- 港股期权需先用 `GetOptionSymbols()` 获取代码映射 / HK options require symbol mapping
+- 期权每张合约通常代表 100 股标的 / Each contract = 100 shares
 - 行权价小数位须和期权链一致 / Strike decimals must match the option chain
 - 期权行情需要期权行情权限 / Option quotes require option quote permission
-- 机构用户额外传 `"secret_key"` 字段
+- 机构用户在请求结构体上设置 `SecretKey`，或调用 `tc.SetSecretKey(key)`

@@ -11,7 +11,7 @@ The Tiger Open Platform Java SDK provides trading and market data APIs for stock
 - 官方文档 / Docs: https://quant.itigerup.com/openapi/java/overview/introduction
 - GitHub: https://github.com/tigerbrokers/openapi-java-sdk
 - Gitee: https://gitee.com/tigerbrokers/openapi-java-sdk
-- SDK Version: 2.4.1 | Java: JDK 1.7+ (64-bit), 推荐 1.8+
+- SDK Version: 2.6.0 | Java: JDK 1.8+ (64-bit)
 
 ### 支持的市场和品种 / Supported Markets
 
@@ -31,7 +31,7 @@ The Tiger Open Platform Java SDK provides trading and market data APIs for stock
 <dependency>
   <groupId>io.github.tigerbrokers</groupId>
   <artifactId>openapi-java-sdk</artifactId>
-  <version>2.4.1</version>
+  <version>2.6.0</version>
 </dependency>
 ```
 
@@ -51,7 +51,7 @@ The Tiger Open Platform Java SDK provides trading and market data APIs for stock
 
 ```groovy
 dependencies {
-    implementation 'io.github.tigerbrokers:openapi-java-sdk:2.4.1'
+    implementation 'io.github.tigerbrokers:openapi-java-sdk:2.6.0'
 }
 ```
 
@@ -144,7 +144,7 @@ static {
 ClientConfig clientConfig = ClientConfig.DEFAULT_CONFIG;
 clientConfig.tigerId = "your tiger id";
 clientConfig.defaultAccount = "your account";
-clientConfig.privateKey = FileUtil.readPrivateKey("/path/to/rsa_private_key_pkcs8.pem");
+clientConfig.privateKey = ConfigFileUtil.readPrivateKey("/path/to/rsa_private_key_pkcs8.pem");
 // clientConfig.token = "xx"; // TBHK牌照需要配置
 // clientConfig.secretKey = "xxxxxx"; // 机构用户
 
@@ -257,89 +257,22 @@ Subscription uses async push: bind custom callbacks to events, auto-called on se
 
 实现 `ApiComposeCallback` 接口：
 
-```java
-import com.tigerbrokers.stock.openapi.client.socket.ApiComposeCallback;
-import com.tigerbrokers.stock.openapi.client.socket.data.pb.*;
-import com.tigerbrokers.stock.openapi.client.socket.data.TradeTick;
-import com.tigerbrokers.stock.openapi.client.struct.SubscribedSymbol;
-import com.tigerbrokers.stock.openapi.client.util.ApiLogger;
-import com.tigerbrokers.stock.openapi.client.util.ProtoMessageUtil;
+`ApiComposeCallback` 是宽接口，共 **29 个方法**，实现类必须全部覆盖（可留空）。
+完整可编译的实现见 [push.md](push.md)。
+`ApiComposeCallback` declares 29 methods — all must be implemented. See push.md
+for a complete, compilable implementation.
 
-public class DefaultApiComposeCallback implements ApiComposeCallback {
+接口方法分组 / Method groups:
 
-  @Override
-  public void orderStatusChange(OrderStatusData data) {
-    ApiLogger.info("orderStatusChange:" + ProtoMessageUtil.toJson(data));
-  }
+| 分组 | 方法 |
+|------|------|
+| 连接生命周期 | `connectionAck()`、`connectionAck(int,int)`、`connectionClosed()`、`connectionKickout(int,String)`、`hearBeat(String)`、`serverHeartBeatTimeOut(String)` |
+| 错误 | `error(String)`、`error(int,int,String)` |
+| 订阅结果 | `subscribeEnd(int,String,String)`、`cancelSubscribeEnd(int,String,String)`、`getSubscribedSymbolEnd(SubscribedSymbol)` |
+| 账户推送 | `orderStatusChange`、`orderTransactionChange`、`positionChange`、`assetChange` |
+| 行情推送 | `quoteChange`、`quoteAskBidChange`、`optionChange`、`optionAskBidChange`、`futureChange`、`futureAskBidChange`、`ccChange`、`ccAskBidChange`、`depthQuoteChange`、`klineChange`、`tradeTickChange`、`fullTickChange`、`stockTopPush`、`optionTopPush` |
 
-  @Override
-  public void positionChange(PositionData data) {
-    ApiLogger.info("positionChange:" + ProtoMessageUtil.toJson(data));
-  }
 
-  @Override
-  public void assetChange(AssetData data) {
-    ApiLogger.info("assetChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void quoteChange(QuoteBasicData data) {
-    ApiLogger.info("quoteChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void quoteAskBidChange(QuoteBBOData data) {
-    ApiLogger.info("quoteAskBidChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void depthQuoteChange(QuoteDepthData data) {
-    ApiLogger.info("depthQuoteChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void klineChange(KlineData data) {
-    ApiLogger.info("klineChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void optionChange(QuoteBasicData data) {
-    ApiLogger.info("optionChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void futureChange(QuoteBasicData data) {
-    ApiLogger.info("futureChange:" + ProtoMessageUtil.toJson(data));
-  }
-
-  @Override
-  public void tradeTickChange(TradeTick data) {
-    ApiLogger.info("tradeTickChange:" + data);
-  }
-
-  @Override
-  public void connectionAck() {
-    ApiLogger.info("connect success.");
-  }
-
-  @Override
-  public void connectionClosed() {
-    ApiLogger.info("connection closed.");
-  }
-
-  @Override
-  public void error(String errorMsg) {
-    ApiLogger.info("receive error:" + errorMsg);
-  }
-
-  @Override
-  public void error(int id, int errorCode, String errorMsg) {
-    ApiLogger.info("error id:" + id + ",code:" + errorCode + ",msg:" + errorMsg);
-  }
-
-  // ... 其他回调方法参见 ApiComposeCallback 接口
-}
-```
 
 **2. 进行订阅 / Subscribe**
 
@@ -450,10 +383,14 @@ public class SubscribeDemo {
 ContractItem stock = ContractItem.buildStockContract("AAPL", "USD");
 
 // 期权合约 / Option contract
-ContractItem option = ContractItem.buildOptionContract("AAPL", "CALL", "2024-01-19", 190.0);
+// 参数顺序：(symbol, expiry, strike, right)，expiry 用 YYYYMMDD
+// Argument order is (symbol, expiry, strike, right)
+ContractItem option = ContractItem.buildOptionContract("AAPL", "20260821", 190.0D, "CALL");
 
 // 期货合约 / Futures contract
-ContractItem future = ContractItem.buildFutureContract("ES", "USD", "20240315");
+// buildFutureContract 只有 (symbol, currency) 和 5 参数完整形式两个重载
+// Only (symbol, currency) and the 5-arg overload exist
+ContractItem future = ContractItem.buildFutureContract("ES", "USD", "CME", "20240315", 50.0D);
 ```
 
 ### TradeOrderRequest 下单请求 / Order Request
@@ -474,17 +411,25 @@ TradeOrderRequest.buildStopLimitOrder(contract, ActionType.SELL, quantity, limit
 
 ### TigerHttpRequest 通用请求 / Generic Request
 
-用于调用未封装的API方法 / For calling unwrapped API methods:
+用于调用未封装的API方法 / For calling unwrapped API methods.
+
+已有专用请求类的接口应优先用专用类（如持仓用 `PositionsRequest`），
+只有 SDK 未封装的接口才走 `TigerHttpRequest`。
+Prefer the dedicated request class when one exists; `TigerHttpRequest` is the
+fallback for APIs the SDK does not wrap.
 
 ```java
-TigerHttpRequest request = new TigerHttpRequest(MethodName.POSITIONS);
+// 成交记录没有专用请求类，用通用请求
+// ORDER_TRANSACTIONS has no dedicated request class
+TigerHttpRequest request = new TigerHttpRequest(MethodName.ORDER_TRANSACTIONS);
 String bizContent = AccountParamBuilder.instance()
     .account(clientConfig.defaultAccount)
-    .market(Market.US)
     .secType(SecType.STK)
+    .symbol("AAPL")
     .buildJson();
 request.setBizContent(bizContent);
 TigerHttpResponse response = client.execute(request);
+// 通用请求返回原始 JSON，需自行解析 / returns raw JSON, parse it yourself
 ```
 
 ## 完整策略示例：动量策略 / Full Example: Momentum Strategy
@@ -604,7 +549,7 @@ public class Nasdaq100 {
 
   /** 平仓未入选股票 / Close positions not selected */
   private void closePosition() throws InterruptedException {
-    Map<String, Integer> positions = getPositions();
+    Map<String, Long> positions = getPositions();
     Set<String> needCloseSymbols = positions.keySet();
     for (String selectedSymbol : selectedSymbols) {
       needCloseSymbols.remove(selectedSymbol);
@@ -615,7 +560,9 @@ public class Nasdaq100 {
       needCloseSymbols.forEach(symbol -> {
         ContractItem contract = ContractItem.buildStockContract(symbol, Currency.USD.name());
         TradeOrderRequest request =
-            TradeOrderRequest.buildLimitOrder(contract, ActionType.SELL, positions.get(symbol), latestPrice.get(symbol));
+            // buildLimitOrder 的整股重载收 Integer；小数持仓需用 (Long, Integer quantityScale) 重载
+            TradeOrderRequest.buildLimitOrder(contract, ActionType.SELL,
+                positions.get(symbol).intValue(), latestPrice.get(symbol));
         orderRequests.add(request);
       });
       executeOrders(orderRequests);
@@ -692,18 +639,18 @@ public class Nasdaq100 {
   }
 
   /** 获取持仓 / Get positions */
-  private Map<String, Integer> getPositions() {
-    Map<String, Integer> result = new HashMap<>();
-    TigerHttpRequest request = new TigerHttpRequest(MethodName.POSITIONS);
+  private Map<String, Long> getPositions() {
+    Map<String, Long> result = new HashMap<>();
+    // 持仓有专用请求类，返回强类型对象，无需手工解析 JSON
+    PositionsRequest request = new PositionsRequest();
     String bizContent = AccountParamBuilder.instance()
         .account(clientConfig.defaultAccount).market(Market.US).secType(SecType.STK).buildJson();
     request.setBizContent(bizContent);
-    TigerHttpResponse response = client.execute(request);
-    if (response.getData() == null || response.getData().isEmpty()) return result;
-    JSONArray positions = JSON.parseObject(response.getData()).getJSONArray("items");
-    for (int i = 0; i < positions.size(); ++i) {
-      JSONObject pos = positions.getJSONObject(i);
-      result.put(pos.getString("symbol"), pos.getInteger("quantity"));
+    PositionsResponse response = client.execute(request);
+    if (!response.isSuccess() || response.getItem() == null) return result;
+    for (PositionDetail pos : response.getItem().getPositions()) {
+      // position 为 long，配合 positionScale 表示小数持仓
+      result.put(pos.getSymbol(), pos.getPosition());
     }
     return result;
   }

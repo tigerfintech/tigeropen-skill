@@ -5,10 +5,10 @@ description: |
   老虎证券 OpenAPI C# SDK 完整技能集。涵盖 SDK 配置、行情查询、交易、实时推送订阅。适用于用 C#/.NET 构建交易应用、查询行情数据、下单交易。
   用户提到以下关键词时自动使用 / Auto-activate on these keywords: 行情、报价、K线、买入、卖出、下单、撤单、交易、持仓、资金、账户、订单、期权、期货、推送、订阅、C# SDK、csharp SDK、dotnet SDK、tigeropen csharp、openapi csharp、quote、price、K-line、order、buy、sell、trade、position、asset、option、future、push
 license: Apache-2.0
-compatibility: Requires C# >= 8.0, .NET >= 6.0
+compatibility: Requires .NET 10.0 (net10.0), C# 14 default
 metadata:
   author: tigerbrokers
-  version: "1.0.0"
+  version: "1.2.3"
   language: zh_CN, en_US
 ---
 
@@ -21,7 +21,7 @@ metadata:
 
 - Docs: https://quant.itigerup.com/openapi/zh/csharp/overview/introduction.html
 - GitHub: https://github.com/tigerfintech/openapi-cs-sdk
-- C# >= 8.0, .NET >= 6.0
+- .NET 10.0 (net10.0), C# 14 default
 
 ## Language Rules / 语言规则
 
@@ -64,7 +64,7 @@ var response = await quoteClient.ExecuteAsync(request);
 
 // 3. 查询订单 / Query orders
 TradeClient tradeClient = new TradeClient(config);
-var orderRequest = new TigerRequest<OrderResponse>()
+var orderRequest = new TigerRequest<OrderBatchResponse>()
 {
     ApiMethodName = TradeApiService.ORDERS,
     ModelValue = new QueryOrderModel() { Account = config.DefaultAccount }
