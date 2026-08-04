@@ -152,9 +152,19 @@ analytics, err := tc.AnalyticsAsset(model.AnalyticsAssetRequest{
 
 > 方法名是 `AnalyticsAsset`，**不是** `PrimeAnalyticsAsset` / The method is `AnalyticsAsset`.
 
-返回内容包含汇总（`pnl` 盈亏、`pnlPercentage` 收益率、`annualizedReturn` 年化收益率）
-与按日历史（`date` 毫秒时间戳、`asset` 总资产、`pnl` 当日盈亏、`cashBalance`、
-`grossPositionValue`、`deposit` 入金、`withdrawal` 出金）。
+返回 `[]model.AnalyticsAsset`，是**扁平的按日列表，没有汇总对象**。
+Returns a flat `[]model.AnalyticsAsset` — one entry per day, no summary object.
+
+| 字段 Field | 类型 | 说明 |
+|-----------|------|------|
+| `Date` | string | 日期 |
+| `HoldingValue` | float64 | 持仓价值 |
+| `CashBalance` | float64 | 现金余额 |
+| `Pnl` | float64 | 盈亏 |
+| `PnlRate` | float64 | 收益率 |
+| `NetValueIndex` | float64 | 净值指数 |
+| `Currency` | string | 币种 |
+| `SegType` | string | 分类（SEC / FUT）|
 
 ---
 

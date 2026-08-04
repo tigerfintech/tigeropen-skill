@@ -10,14 +10,14 @@
 
 ### 查询期权 / Query Options
 
-1. **查到期日 Get expirations**: `OPTION_EXPIRATION` → 获取可选到期日列表
-2. **查期权链 Get chain**: `OPTION_CHAIN` → 获取指定到期日的所有合约，可按 Greeks 筛选
-3. **查行情 Get quotes**: `OPTION_BRIEF` → 获取期权实时行情和希腊字母
+1. **查到期日 Get expirations**: `get_option_expiration()` → 获取可选到期日列表
+2. **查期权链 Get chain**: `get_option_chain()` → 获取指定到期日的所有合约，可按 Greeks 筛选
+3. **查行情 Get quotes**: `get_option_brief()` → 获取期权实时行情和希腊字母
 
 ### 港股期权特殊处理 / HK Option Special Handling
 
 - 港股期权标的代码不同于正股 / HK option underlyings differ from stock codes: `00700` → `TCH`（腾讯）
-- 使用 `ALL_HK_OPTION_SYMBOLS` 查询港股期权代码映射
+- 使用 `get_option_symbols(U("HK"))` 查询港股期权代码映射
 
 ---
 
@@ -27,6 +27,8 @@
 #include "tigerapi/client_config.h"
 #include "tigerapi/trade_client.h"
 #include "tigerapi/quote_client.h"
+#include "tigerapi/contract_util.h"
+#include "tigerapi/order_util.h"
 
 using namespace TIGER_API;
 
@@ -40,12 +42,12 @@ auto quote_client = make_shared<QuoteClient>(config);
 ## 期权到期日 / Option Expirations
 
 ```cpp
-value obj = value::object(true);
-obj[U("symbols")] = value::array();
-obj[U("symbols")][0] = value::string(U("AAPL"));
-obj[U("market")] = value::string(U("US"));  // US / HK
+// SDK 已封装 get_option_expiration(symbols)
+// The SDK wraps this API; no raw post() needed.
+value exp_symbols = value::array();
+exp_symbols[0] = value::string(U("AAPL"));
 
-value result = quote_client->post(OPTION_EXPIRATION, obj);
+value result = quote_client->get_option_expiration(exp_symbols);
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -61,21 +63,9 @@ ucout << result << endl;
 ## 期权链 / Option Chain
 
 ```cpp
-value obj = value::object(true);
-obj[U("symbol")] = value::string(U("AAPL"));
-obj[U("expiry")] = value::string(U("2025-08-29"));
-obj[U("market")] = value::string(U("US"));
-
-// 可选筛选参数 / Optional filter params:
-// obj[U("in_the_money")] = value::boolean(true);
-// obj[U("implied_volatility_min")] = value::number(0.15);
-// obj[U("implied_volatility_max")] = value::number(0.80);
-// obj[U("delta_min")] = value::number(0.2);
-// obj[U("delta_max")] = value::number(0.8);
-// obj[U("open_interest_min")] = value::number(100);
-// obj[U("return_greek_value")] = value::boolean(true); // 返回 Greeks
-
-value result = quote_client->post(OPTION_CHAIN, obj);
+// 不带筛选时用 wrapper（expiry 支持 "yyyy-MM-dd" 或毫秒时间戳 time_t 重载）
+// Unfiltered: use the wrapper. expiry accepts "yyyy-MM-dd" or an epoch-ms time_t.
+value result = quote_client->get_option_chain(U("AAPL"), U("2026-08-21"));
 ucout << result << endl;
 
 // 返回字段 / Response fields (items[].call / items[].put):
@@ -95,6 +85,36 @@ ucout << result << endl;
 // rho          - Rho
 ```
 
+> ⚠️ **`get_option_chain` 的 `option_filter` 参数当前不生效**：wrapper 只用
+> symbol + expiry 构造请求体，从不读取 `option_filter`
+> （`src/quote_client.cpp:260-269`）。需要按 Greeks / IV / 持仓量筛选时，
+> **必须走裸 `post`**，否则会静默拿到未筛选的全量期权链。
+> The `option_filter` argument is accepted but never read by the wrapper, so
+> filters silently have no effect. Use the raw `post` form below when filtering.
+
+```cpp
+// 需要筛选时用裸 post / raw post when you need filtering
+value obj = value::object(true);
+value basic = value::object(true);
+basic[U("symbol")] = value::string(U("AAPL"));
+basic[U("expiry")] = value::string(U("2026-08-21"));
+value option_basic = value::array();
+option_basic[0] = basic;
+obj[U("option_basic")] = option_basic;
+
+// 筛选条件 / filter criteria
+obj[U("in_the_money")] = value::boolean(true);
+obj[U("implied_volatility_min")] = value::number(0.15);
+obj[U("implied_volatility_max")] = value::number(0.80);
+obj[U("delta_min")] = value::number(0.2);
+obj[U("delta_max")] = value::number(0.8);
+obj[U("open_interest_min")] = value::number(100);
+obj[U("return_greek_value")] = value::boolean(true);  // 返回 Greeks
+
+value filtered = quote_client->post(OPTION_CHAIN, obj);
+ucout << filtered << endl;
+```
+
 ---
 
 ## 港股期权代码映射 / HK Option Symbol Mapping
@@ -102,11 +122,10 @@ ucout << result << endl;
 ```cpp
 // 港股期权标的代码与股票代码不同，需先查询映射
 // HK option underlying symbols differ from stock codes
+// SDK 已封装 get_option_symbols(market="HK", lang="")
+// The SDK wraps this API; no raw post() needed.
 
-value obj = value::object(true);
-obj[U("market")] = value::string(U("HK"));
-
-value result = quote_client->post(ALL_HK_OPTION_SYMBOLS, obj);
+value result = quote_client->get_option_symbols(U("HK"));
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -115,9 +134,9 @@ ucout << result << endl;
 // underlyingSymbol - 正股代码 (e.g. "00700")
 
 // 然后使用映射后的代码查询港股期权 / Then use mapped symbol:
-// obj[U("symbols")][0] = value::string(U("TCH.HK"));
-// obj[U("market")] = value::string(U("HK"));
-// quote_client->post(OPTION_EXPIRATION, obj);
+value hk_symbols = value::array();
+hk_symbols[0] = value::string(U("TCH.HK"));
+value hk_expirations = quote_client->get_option_expiration(hk_symbols);
 ```
 
 ---
@@ -125,21 +144,19 @@ ucout << result << endl;
 ## 期权实时行情 / Option Brief (Real-time Quotes)
 
 ```cpp
-value obj = value::object(true);
-obj[U("market")] = value::string(U("US"));
+// SDK 已封装 get_option_brief(identifiers) / get_option_brief(identifier)
+// 入参是期权完整代码（identifier），SDK 内部拆解为 option_basic（最多30条）
+// The SDK wraps this API; pass option identifiers (max 30), not option_basic objects.
 
-// option_basic 列表（支持批量，最多30条）
-value option_basic = value::array();
-value item = value::object(true);
-item[U("symbol")] = value::string(U("AAPL"));
-item[U("right")] = value::string(U("CALL"));
-item[U("expiry")] = value::string(U("2025-08-29"));  // yyyy-MM-dd
-item[U("strike")] = value::string(U("150.0"));
-option_basic[0] = item;
-obj[U("option_basic")] = option_basic;
+value brief_ids = value::array();
+brief_ids[0] = value::string(U("AAPL  260821C00150000"));
+brief_ids[1] = value::string(U("AAPL  260821P00150000"));
 
-value result = quote_client->post(OPTION_BRIEF, obj);
+value result = quote_client->get_option_brief(brief_ids);
 ucout << result << endl;
+
+// 单个合约也可直接传字符串 / Single contract overload:
+// value one = quote_client->get_option_brief(U("AAPL  260821C00150000"));
 
 // 返回字段 / Response fields:
 // identifier    - 期权完整代码
@@ -161,19 +178,19 @@ ucout << result << endl;
 ## 期权深度行情 / Option Depth Quotes
 
 ```cpp
-value obj = value::object(true);
-obj[U("market")] = value::string(U("US"));
+// SDK 已封装 get_option_depth(symbols, market="US")
+// symbols 即 option_basic 数组，SDK 内部包成 {option_basic, market}
+// The SDK wraps this API; `symbols` is the option_basic array.
 
-value option_basic = value::array();
-value item = value::object(true);
-item[U("symbol")] = value::string(U("AAPL"));
-item[U("right")] = value::string(U("PUT"));
-item[U("expiry")] = value::string(U("2024-06-28"));
-item[U("strike")] = value::string(U("210.0"));
-option_basic[0] = item;
-obj[U("option_basic")] = option_basic;
+value depth_basic = value::array();
+value depth_item = value::object(true);
+depth_item[U("symbol")] = value::string(U("AAPL"));
+depth_item[U("right")] = value::string(U("PUT"));
+depth_item[U("expiry")] = value::string(U("2026-08-21"));
+depth_item[U("strike")] = value::string(U("210.0"));
+depth_basic[0] = depth_item;
 
-value result = quote_client->post(OPTION_DEPTH, obj);
+value result = quote_client->get_option_depth(depth_basic, U("US"));
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -190,19 +207,14 @@ ucout << result << endl;
 
 ```cpp
 // 仅支持美股期权 / US market only
+// SDK 已封装 get_option_trade_tick(identifiers)
+// 入参是期权完整代码（identifier），SDK 内部拆解为 option_basic
+// The SDK wraps this API; pass option identifiers, not option_basic objects.
 
-value obj = value::object(true);
+value tick_ids = value::array();
+tick_ids[0] = value::string(U("AAPL  260821P00185000"));
 
-value option_list = value::array();
-value item = value::object(true);
-item[U("symbol")] = value::string(U("AAPL"));
-item[U("right")] = value::string(U("PUT"));
-item[U("expiry")] = value::string(U("2024-03-08"));
-item[U("strike")] = value::string(U("185.0"));
-option_list[0] = item;
-obj[U("option_basic")] = option_list;
-
-value result = quote_client->post(OPTION_TRADE_TICK, obj);
+value result = quote_client->get_option_trade_tick(tick_ids);
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -217,23 +229,21 @@ ucout << result << endl;
 ## 期权K线 / Option K-line
 
 ```cpp
-value obj = value::object(true);
-obj[U("market")] = value::string(U("US"));
+// SDK 已封装 get_option_kline_value(identifiers, begin_time, end_time=4070880000000)
+// 入参是期权完整代码（identifier）+ 毫秒时间戳；wrapper 固定 period="day"
+// The SDK wraps this API; identifiers + epoch-ms range, period is fixed to "day".
 
-value option_query = value::array();
-value item = value::object(true);
-item[U("symbol")] = value::string(U("AAPL"));
-item[U("right")] = value::string(U("CALL"));
-item[U("expiry")] = value::string(U("2024-06-28"));
-item[U("strike")] = value::string(U("170.0"));
-item[U("begin_time")] = value::string(U("2024-06-26"));
-item[U("end_time")] = value::string(U("2024-06-26 23:59:59"));
-item[U("period")] = value::string(U("1min"));  // day/1min/5min/30min/60min
-option_query[0] = item;
-obj[U("option_query")] = option_query;
+value kline_ids = value::array();
+kline_ids[0] = value::string(U("AAPL  260821C00170000"));
 
-value result = quote_client->post(OPTION_KLINE, obj);
+value result = quote_client->get_option_kline_value(kline_ids,
+                                                   1755734400000LL,   // 2026-08-21 00:00 ET
+                                                   1755820799000LL);  // 2026-08-21 23:59 ET
 ucout << result << endl;
+
+// 需要 1min/5min/30min/60min 等分钟级周期时，SDK wrapper 未开放 period 参数，
+// 此时才退回裸 post(OPTION_KLINE, obj) 自行构造 option_query。
+// Minute-level periods are not exposed by the wrapper; fall back to raw post() then.
 
 // 返回字段 / Response fields:
 // items[] - K线数据点列表
@@ -249,20 +259,19 @@ ucout << result << endl;
 
 ```cpp
 // 目前仅支持港股期权 / HK market only currently
+// SDK 已封装 get_option_timeline(symbols, market="US", begin_time=-1)
+// symbols 会被包成 option_query 字段（注意不是 option_list）
+// The SDK wraps this API; `symbols` is placed under the option_query field.
 
-value obj = value::object(true);
-obj[U("market")] = value::string(U("HK"));
+value tl_query = value::array();
+value tl_item = value::object(true);
+tl_item[U("symbol")] = value::string(U("ALB.HK"));
+tl_item[U("right")] = value::string(U("CALL"));
+tl_item[U("expiry")] = value::number(1753878054000LL);  // 毫秒时间戳
+tl_item[U("strike")] = value::string(U("117.50"));
+tl_query[0] = tl_item;
 
-value option_list = value::array();
-value item = value::object(true);
-item[U("symbol")] = value::string(U("ALB.HK"));
-item[U("right")] = value::string(U("CALL"));
-item[U("expiry")] = value::number(1753878054000LL);  // 毫秒时间戳
-item[U("strike")] = value::string(U("117.50"));
-option_list[0] = item;
-obj[U("option_list")] = option_list;
-
-value result = quote_client->post(OPTION_TIMELINE, obj);
+value result = quote_client->get_option_timeline(tl_query, U("HK"));
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -279,17 +288,15 @@ ucout << result << endl;
 ## 期权分析 / Option Analysis
 
 ```cpp
-value obj = value::object(true);
-
+// SDK 已封装 get_option_analysis(symbols, market="US", lang="")
+// The SDK wraps this API; no raw post() needed.
 value symbols = value::array();
 value sym_item = value::object(true);
 sym_item[U("symbol")] = value::string(U("AAPL"));
 sym_item[U("period")] = value::string(U("52week"));  // 3year/52week/26week/13week
 symbols[0] = sym_item;
-obj[U("symbols")] = symbols;
-obj[U("market")] = value::string(U("US"));
 
-value result = quote_client->post(OPTION_ANALYSIS, obj);
+value result = quote_client->get_option_analysis(symbols, U("US"));
 ucout << result << endl;
 
 // 返回字段 / Response fields:
@@ -335,7 +342,7 @@ ucout << brief_one << endl;
 // 美股 US: "AAPL  250829C00150000"
 //   格式: 标的(padding至6位) + YYMMDD + C/P + 行权价*1000(8位)
 // 港股 HK: "TCH.HK 230616C00550000"
-//   使用映射后的代码 / Use mapped symbol from ALL_HK_OPTION_SYMBOLS
+//   使用映射后的代码 / Use mapped symbol from get_option_symbols(U("HK"))
 ```
 
 ---
@@ -344,22 +351,22 @@ ucout << brief_one << endl;
 
 ```cpp
 // 买入看涨期权 / Buy call option
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("contract")] = value::object(true);
-obj[U("contract")][U("symbol")] = value::string(U("AAPL"));
-obj[U("contract")][U("sec_type")] = value::string(U("OPT"));
-obj[U("contract")][U("expiry")] = value::string(U("20250829"));   // YYYYMMDD
-obj[U("contract")][U("strike")] = value::number(150.0);
-obj[U("contract")][U("right")] = value::string(U("CALL"));
-obj[U("contract")][U("currency")] = value::string(U("USD"));
-obj[U("action")] = value::string(U("BUY"));
-obj[U("order_type")] = value::string(U("LMT"));
-obj[U("limit_price")] = value::number(5.0);
-obj[U("quantity")] = value::number(1);  // 1张 = 100股
+// SDK 已封装：ContractUtil::option_contract + OrderUtil + place_order
+// The SDK wraps this flow; no raw post(PLACE_ORDER, obj) needed.
 
-value result = trade_client->post(PLACE_ORDER, obj);
+// option_contract(symbol, expiry, strike, right, currency="USD", multiplier=100, ...)
+// expiry 为 YYYYMMDD / expiry is YYYYMMDD
+Contract opt_contract = ContractUtil::option_contract(U("AAPL"), U("20260821"),
+                                                      U("150.0"), U("CALL"), U("USD"));
+
+// 1张 = 100股 / 1 contract = 100 shares
+Order opt_order = OrderUtil::limit_order(U("123456"), opt_contract, U("BUY"), 1, 5.0);
+
+value result = trade_client->place_order(opt_order);
 ucout << result << endl;
+
+// 也可用 identifier 重载构造合约 / Or build the contract from an identifier:
+// Contract c2 = ContractUtil::option_contract(U("AAPL  260821C00150000"));
 ```
 
 ---
@@ -411,11 +418,9 @@ ucout << combo_result << endl;
 ## 查询期权持仓 / Query Option Positions
 
 ```cpp
-value obj = value::object(true);
-obj[U("account")] = value::string(U("123456"));
-obj[U("sec_type")] = value::string(U("OPT"));
-
-value result = trade_client->post(POSITIONS, obj);
+// SDK 已封装 get_positions(account, sec_type, currency, market, symbol, ...)
+// The SDK wraps this API; no raw post() needed.
+value result = trade_client->get_positions(U("123456"), U("OPT"));
 ucout << result << endl;
 
 // 期权持仓额外字段 / Option-specific position fields:
@@ -428,9 +433,10 @@ ucout << result << endl;
 
 ## 注意事项 / Notes
 
-- 港股期权需先用 `ALL_HK_OPTION_SYMBOLS` 获取代码映射 / HK options require symbol mapping
+- 港股期权需先用 `get_option_symbols(U("HK"))` 获取代码映射 / HK options require symbol mapping
 - 期权每张合约通常代表100股标的 / Each contract = 100 shares
 - 期权链返回的 Greeks 为上一交易日收盘值 / Chain Greeks are from previous close
 - 行权价小数位须和期权链一致 / Strike decimals must match the option chain
 - 期权行情需要期权行情权限 / Option quotes require option quote permission
-- 机构用户可在 obj 中额外传 `sub_account` / `secret_key` 字段
+- 机构用户的 `secret_key` 由 SDK wrapper 自动注入；wrapper 未开放的字段
+  （如 `sub_account`）才退回裸 `post(CONSTANT, obj)` 自行构造

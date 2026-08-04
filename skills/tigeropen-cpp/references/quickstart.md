@@ -163,11 +163,25 @@ ucout << symbols << std::endl;
 
 ## 直接调用 API / Raw API Call
 
-当 SDK 未封装某个 API 时，可直接使用 `TigerClient::post()`：
+**优先用 SDK 封装好的方法**，只有 SDK 未封装某个 API 时才退回 `TigerClient::post()`。
+Prefer the SDK's first-class wrappers; fall back to `TigerClient::post()` only for
+APIs the SDK does not wrap.
+
+```cpp
+#include "tigerapi/quote_client.h"
+
+// 推荐：SDK 已封装的接口直接调 wrapper（如市场状态）
+// Preferred: call the wrapper when one exists (e.g. market state).
+auto qc = make_shared<QuoteClient>(config);
+value state = qc->get_market_state(U("US"));
+ucout << state << endl;
+```
 
 ```cpp
 #include "tigerapi/tiger_client.h"
 
+// 兜底：SDK 未封装的接口才用裸 post
+// Fallback: raw post() for APIs without a wrapper.
 // 直接用 TigerClient（QuoteClient/TradeClient 均继承自它）
 auto client = make_shared<TigerClient>(config);
 
